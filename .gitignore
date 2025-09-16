@@ -6,3 +6,5 @@ exp/
 custom/models/adaptive_clustering_transformer/adaptive_clustering_attention/extensions/build
 custom/models/adaptive_clustering_transformer/adaptive_clustering_attention/extensions/cluster_attention.egg-info
 **/*.so
+sh/
+temp/

@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 )
 @log_exception(logger=logger)
 def main(cfg: DictConfig):
+    cfg = OmegaConf.to_container(cfg, resolve=True)
+
     # print the config
     script = os.path.basename(sys.argv[0])
     script_name = os.path.splitext(script)[0]
@@ -38,11 +40,10 @@ def main(cfg: DictConfig):
     logger.info(f"Arguments: {args}")
     logger.info(f"Conda Environment: {conda_env}")
     logger.info(f"Start Time: {start_time}")
-
-    cfg = OmegaConf.to_container(cfg, resolve=True)
+    logger.info(f"Training Fold: {cfg.get('dataset_folder').get('dataset').get('fold')}")
 
     # set seed
-    seed = cfg.get("dataset_folder").get('dataset').get("seed", 42)
+    seed = cfg.get("dataset_folder").get('dataset').get("seed")
     pl.seed_everything(seed, workers=True)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
@@ -71,8 +72,15 @@ def main(cfg: DictConfig):
 
     model_config, criterion_config = cfg.get("model_folder").get("model"), cfg.get("model_folder").get("criterion")
     optimizer_config, lr_scheduler_config = cfg.get("model_folder").get("optimizer"), cfg.get("model_folder").get("lr_scheduler", {})
+    extra_config = cfg.get("model_folder").get("extra")
+    model_config['model_params'][0]['n_samples'] = len(data_module.train_dataset)
+    if cfg.get('num_classes', False):
+        logger.info("Overriding num_classes in model config with cfg.num_classes")
+    else:
+        cfg['num_classes'] = 2
+        logger.info("Setting cfg.num_classes to 2 as default")
     model = TrainModule(cfg.get('num_classes'), **model_config, **criterion_config,
-                        **optimizer_config, **lr_scheduler_config)
+                        **optimizer_config, **lr_scheduler_config, **extra_config)
     logger.info("model built.")
 
     trainer.fit(model, data_module, ckpt_path=cfg.get("ckpt_path", None))

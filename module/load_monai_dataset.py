@@ -10,8 +10,8 @@ from monai import transforms as monai_transforms
 # local import
 from custom import transforms as custom_transforms
 from utils.load_module import get_unique_attr_across
-from data_module.read_metadata import read_metadata_as_df
-from data_module.split_dataset import split_dataset_folds_and_save
+from module.read_metadata import read_metadata_as_df
+from module.split_dataset import split_dataset_folds_and_save
 
 __all__ = ["load_monai_dataset"]
 

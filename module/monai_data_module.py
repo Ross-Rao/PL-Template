@@ -9,7 +9,7 @@ import monai
 import numpy as np
 import lightning.pytorch as pl
 # local import
-from data_module.load_monai_dataset import load_monai_dataset
+from module.load_monai_dataset import load_monai_dataset
 
 logger = logging.getLogger(__name__)
 __all__ = ['MonaiDataModule']
