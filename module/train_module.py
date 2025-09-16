@@ -173,7 +173,6 @@ class TrainModule(pl.LightningModule):
 
         # on_train_epoch_start may not suitable for update model parameters, maybe works for buffer update
         # we update anchor in training_step with anchor_update_frequency
-        self.trainer.train_dataloader.shuffle = True
         update_epoch = [i for i in range(frequency, stage_change_epoch - frequency + 1, frequency)]
         if self.current_epoch in update_epoch:
             search_ratio = self.current_epoch / (stage_change_epoch - frequency) * max_search_ratio

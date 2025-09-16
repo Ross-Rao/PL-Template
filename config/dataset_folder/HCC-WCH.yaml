@@ -35,15 +35,13 @@ dataset:
       keys: ["image"]
       spatial_size: ['${dataset_folder.img_size}', '${dataset_folder.img_size}']
       mode: "nearest"
-    ToTensorD:
-      keys: ['image']
     ScaleIntensityD:
       keys: ['image']
       minv: 0.0
       maxv: 1.0
     "AsDiscreteD":
-      "keys": ["label"]
-      "to_onehot": 2
+      keys: ["label"]
+      to_onehot: 2
 mixup:
   mixup_ratio: 25
   mixup_keys: ['image', 'label']

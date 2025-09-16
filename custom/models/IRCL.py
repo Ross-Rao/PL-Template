@@ -404,7 +404,7 @@ class Stage1Model(nn.Module):
         hid_x = self.pool(hid_x).squeeze()
         npc_x = self.act(self.fc(hid_x))
         if not loss:
-            cluster = self.mc.get_cluster(npc_x)
+            cluster = self.mc.get_cluster(npc_x.as_tensor())
             return cluster, hid_x
         loss_dt = self.mc(npc_x, index, local_neighbor_indices)
         # used in old version(20250412)
