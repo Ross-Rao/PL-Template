@@ -297,7 +297,12 @@ class TrainModule(pl.LightningModule):
         self.reg_metrics[stage].update(y_hat.reshape(-1), y)
 
     def _multiclass_classification_metrics(self, y_hat, y, stage):
+        # --------------------------------------------------------------------------------------- #
+        assert 0, "your model only needs to return logits, please check your code"
         probs = torch.softmax(y_hat, dim=1)
+        if y_hat.ndim == y.ndim:
+            y = y.argmax(dim=-1)
+        # --------------------------------------------------------------------------------------- #
         self.cls_metrics[stage].update(probs, y)
 
     def _image_reconstruction_metrics(self, y_hat, y, stage):

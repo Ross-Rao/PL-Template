@@ -3,6 +3,7 @@ import os
 import logging
 from copy import deepcopy
 from functools import partial
+from typing import Union
 # package import
 import torch
 import monai
@@ -16,7 +17,7 @@ __all__ = ['MonaiDataModule']
 
 
 class MonaiDataModule(pl.LightningDataModule):
-    def __init__(self, dataset: dict[str, ...], data_loader: dict[str, ...], mixup: dict[str, ...]) -> None:
+    def __init__(self, dataset: dict[str, ...], data_loader: dict[str, ...], mixup: Union[None, dict[str, ...]]) -> None:
         super().__init__()
 
         self.dataset_config = dataset
@@ -24,8 +25,9 @@ class MonaiDataModule(pl.LightningDataModule):
             "data_loader must contain 'train_loader', 'val_loader', and 'test_loader'")
 
         self.original_train_dataset, self.val_dataset, self.test_dataset = load_monai_dataset(**dataset)
+        mixup = mixup if mixup is not None else {}
         mixup_ratio, mixup_keys = mixup.get('mixup_ratio', 0), mixup.get('mixup_keys', [])
-        assert (mixup_ratio == 0) == (mixup_keys is []), \
+        assert (mixup_ratio == 0) == (len(mixup_keys) == 0), \
             "mixup_ratio and mixup_keys must be both None or both not None, or you should check your mixup config."
         if mixup_ratio > 0 and mixup_keys is not None:
             self.train_dataset = self.mixup_dataset(self.original_train_dataset, keys=mixup_keys, ratio=mixup_ratio)
