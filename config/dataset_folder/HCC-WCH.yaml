@@ -26,7 +26,7 @@ dataset:
       keys: ['image']
     ExtractSlicesD:
       keys: ["image"]
-      k: 7
+      k: 3
       dim: -1
     EnsureChannelFirstD:
       keys: ["image"]
@@ -43,20 +43,20 @@ dataset:
       keys: ["label"]
       to_onehot: 2
 mixup:
-  mixup_ratio: 25
-  mixup_keys: ['image', 'label']
+#  mixup_ratio: 25
+#  mixup_keys: ['image', 'label']
 dataloader:
   train_loader:
     shuffle: True
-    batch_size: 128
+    batch_size: 4
     num_workers: 6
     pin_memory: true
     persistent_workers: true
   val_loader:
     shuffle: False
     num_workers: 6
-    batch_size: 64
+    batch_size: 4
   test_loader:
     shuffle: False
     num_workers: 6
-    batch_size: 64
+    batch_size: 4

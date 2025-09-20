@@ -12,7 +12,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from lightning.pytorch.loggers import TensorBoardLogger
 # local import
-from module.train_module import TrainModule
+from module.stage2_train_module import TrainModule
 from module.monai_data_module import MonaiDataModule
 from custom import callbacks as custom_callbacks
 from utils.load_module import get_unique_attr_across
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 @hydra.main(
     version_base="1.2",
     config_path=os.getenv('CONFIGS_LOCATION', 'config'),
-    config_name="config",
+    config_name="stage2_config",
 )
 @log_exception(logger=logger)
 def main(cfg: DictConfig):

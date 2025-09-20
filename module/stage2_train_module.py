@@ -143,7 +143,8 @@ class TrainModule(pl.LightningModule):
             'test': self._test_reg_metrics,
         }
         # --------------------------------------------------------------------------------------- #
-        assert 0 and kwargs.keys(), "add extra config here, please check your code"
+        # assert 0 and kwargs.keys(), "add extra config here, please check your code"
+        self.latent_dim = kwargs.get('latent_dim', 128)
         # --------------------------------------------------------------------------------------- #
 
     def configure_optimizers(self):
@@ -160,13 +161,36 @@ class TrainModule(pl.LightningModule):
                 return optimizer[0]
             return optimizer
 
+    @staticmethod
+    def perturbate_embedding(B: int, latent_dim: int, device: torch.device = torch.device('cpu')):
+        """
+        B: batch size
+        latent_dim: 维度总数
+        device: 输出设备
+        返回: pert_vec, GT_vec  (B, latent_dim) 均为 torch.float32
+        """
+        pert_vec = torch.zeros((B, latent_dim), dtype=torch.float32, device=device)
+        GT_vec   = torch.zeros((B, latent_dim), dtype=torch.float32, device=device)
+
+        values = torch.linspace(-1.5, 1.5, 16, dtype=torch.float32, device=device)
+
+        for i in range(B):
+            dim = torch.randint(latent_dim, (1,)).item()
+            val = values[torch.randint(len(values), (1,)).item()]
+            pert_vec[i, dim] = val
+            GT_vec[i, dim]   = 1
+
+        return pert_vec, GT_vec
+
     def get_batch(self, batch):
         if isinstance(batch, list):
             return batch[0], batch[1]
         elif isinstance(batch, dict):
             # --------------------------------------------------------------------------------------- #
-            assert 0, "configure your input here, please check your code"
-            return self, batch
+            # assert 0, "configure your input here, please check your code"
+            pert_vec, gt = self.perturbate_embedding(
+                batch['image'].size(0), self.latent_dim, device=batch['image'].device)
+            return (batch['image'].as_tensor(), pert_vec), (batch['image'].as_tensor(), gt)
             # --------------------------------------------------------------------------------------- #
         else:
             raise ValueError('Invalid batch type')
@@ -184,7 +208,7 @@ class TrainModule(pl.LightningModule):
         x, y = self.get_batch(batch)
         model_params = x if isinstance(x, tuple) else (x,)
         # --------------------------------------------------------------------------------------- #
-        assert 0, "execute your model with your input here, please check your code"
+        # assert 0, "execute your model with your input here, please check your code"
         y_hat = self.model(*model_params)
         # --------------------------------------------------------------------------------------- #
         return y, y_hat
@@ -193,7 +217,7 @@ class TrainModule(pl.LightningModule):
     def criterion_step(self, y, y_hat):
         criterion_params = (y_hat if isinstance(y_hat, tuple) else (y_hat,)) + (y if isinstance(y, tuple) else (y,))
         # --------------------------------------------------------------------------------------- #
-        assert 0, "add your own code here to match the output with loss, please check your code"
+        # assert 0, "add your own code here to match the output with loss, please check your code"
         # be sure that y_hat params first and y params later in your criterion function
         loss = self.criterion(*criterion_params)
         # --------------------------------------------------------------------------------------- #
@@ -212,7 +236,7 @@ class TrainModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         y, y_hat = self.model_step(batch, batch_idx)
-        self._update_metrics(y_hat, y, "val")
+        self._update_metrics(y_hat[1:3], (y[0], batch['label'].as_tensor()), "val")
 
         loss = self.criterion_step(y, y_hat)
         return loss
@@ -227,7 +251,7 @@ class TrainModule(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         y, y_hat = self.model_step(batch, batch_idx)
-        self._update_metrics(y_hat, y, "test")
+        self._update_metrics(y_hat[1:3], (y[0], batch['label'].as_tensor()), "test")
 
     def on_train_epoch_end(self):
         train_loss = self.trainer.callback_metrics.get('train/loss')
@@ -298,7 +322,7 @@ class TrainModule(pl.LightningModule):
 
     def _multiclass_classification_metrics(self, y_hat, y, stage):
         # --------------------------------------------------------------------------------------- #
-        assert 0, "your model only needs to return logits, please check your code"
+        # assert 0, "your model only needs to return logits, please check your code"
         probs = torch.softmax(y_hat, dim=1)
         if y_hat.ndim == y.ndim:
             y = y.argmax(dim=-1)
