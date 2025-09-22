@@ -285,6 +285,8 @@ class TrainModule(pl.LightningModule):
                 if y_hat.shape[1] == 1:  # Regression task
                     self._regression_metrics(y_hat, y, stage)
                 elif y_hat.shape[1] >= 2:  # Multi-class classification task
+                    if y_hat.ndim == y.ndim:  # convert one-hot to index
+                        y = y.argmax(dim=-1)
                     self._multiclass_classification_metrics(y_hat, y, stage)
                     if stage == "test":
                         self.confusion_matrix.update(y_hat, y)
@@ -300,8 +302,6 @@ class TrainModule(pl.LightningModule):
         # --------------------------------------------------------------------------------------- #
         assert 0, "your model only needs to return logits, please check your code"
         probs = torch.softmax(y_hat, dim=1)
-        if y_hat.ndim == y.ndim:
-            y = y.argmax(dim=-1)
         # --------------------------------------------------------------------------------------- #
         self.cls_metrics[stage].update(probs, y)
 
