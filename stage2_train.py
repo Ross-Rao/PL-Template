@@ -41,6 +41,8 @@ def main(cfg: DictConfig):
     logger.info(f"Conda Environment: {conda_env}")
     logger.info(f"Start Time: {start_time}")
     logger.info(f"Training Fold: {cfg.get('dataset_folder').get('dataset').get('fold')}")
+    logger.info(f"Config:\n{OmegaConf.to_yaml(cfg)}")
+
 
     # set seed
     seed = cfg.get("dataset_folder").get('dataset').get("seed")
@@ -102,7 +104,7 @@ def main(cfg: DictConfig):
         result = test_trainer.test(model, data_module, ckpt_path=os.path.join(ckpt_path, ckpt_file))
         base_name = os.path.basename(ckpt_file)
         pd.DataFrame(result).to_csv(os.path.join(test_trainer.logger.log_dir, f'{base_name}_result.csv'))
-        logger.info(f"testing finished for {base_name}.")
+        logger.info(f"testing finished for {base_name}.\n\n\n\n\n")
 
 if __name__ == "__main__":
     main()

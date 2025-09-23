@@ -24,8 +24,11 @@ trainer:  # inline definition of trainer, don't change the name
   log_every_n_steps: 2
 # module settings: used in module/example_module.py
 criterion:
-  criterion: 'BCEWithLogitsLoss'
+  criterion: 'FocalLoss'
   criterion_params:
+    gamma: 2.0
+    alpha: 0.25
+    reduction: 'mean'
 optimizer:
   optimizer: Adam
   optimizer_params:
