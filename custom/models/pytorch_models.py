@@ -1,11 +1,20 @@
 # python import
+import os
+import logging
 # package import
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import vgg19, VGG19_Weights
+from scipy.optimize import minimize
+import numpy as np
 # local import
 
+__all__ = [
+    'TotalLoss', 'ExplainModel'
+]
+
+logger = logging.getLogger(__name__)
 
 class ResidualAdd(nn.Module):
     def __init__(self, fn, downsample):
@@ -294,10 +303,13 @@ class ExplainModel(nn.Module):
         super_x = self.unet(x)
 
         disc_z = self.disc(z)
+        disc_noise = self.disc(torch.randn_like(z))
+        disc_z = torch.cat((disc_z, disc_noise), dim=1)
+
         pert_x = self.generator(z + pert_vec)
         altered_z = self.recognizer(pert_x - recon_x)
 
-        return recon_x, super_x, z_subset_score, z, disc_z, altered_z
+        return recon_x, super_x, z_subset_score, z, disc_z, altered_z, pert_x
 
 
 # if __name__ == "__main__":
@@ -396,17 +408,100 @@ def js_loss(logits1, logits2, temperature=1.0, reduction='batchmean'):
     return js
 
 
+def pareto_efficient_weights(loss_dict: dict,
+                             params: list,
+                             c: torch.Tensor,
+                             prev_w: torch.Tensor,
+                             ggt_eps):
+    """
+    loss_dict:  {'loss_name': scalar_tensor}  当前batch各任务loss
+    params:     list of tensors  所有待优化参数（共享权重）
+    c:          tensor([c1,c2,...])  权重下限，>0
+    prev_w:     tensor([w1,w2,...])  上一步权重，None则默认平均
+    return:     tensor([w1,w2,...])  投影后最优权重
+    """
+    k = len(loss_dict)
+    device = c.device
+
+    # 1. 计算各任务梯度  G[i] = flatten(grad(loss_i))
+    G = []
+    for name, loss in loss_dict.items():
+        grad_vec = []
+        for p in params:
+            if p.grad is not None:
+                p.grad.zero_()
+        loss.backward(retain_graph=True)   # 累积梯度
+        for p in params:
+            if p.grad is not None:
+                grad_vec.append(p.grad.detach().flatten())
+        G.append(torch.cat(grad_vec))      # [m]
+    G = torch.stack(G)                     # [k, m]
+
+    # 2. 解析解（忽略非负） 对应公式 (7-30)
+    GGT = G @ G.T               # [k, k]
+    rank = torch.linalg.matrix_rank(GGT)
+    is_zero_row = (GGT.abs().sum(dim=1) == 0).any()
+    is_singular = rank < k
+
+    if is_zero_row or is_singular:
+        # 加对角正则让矩阵满秩
+        GGT += torch.eye(k, device=device) * ggt_eps
+    e = torch.ones((k, 1), device=device)
+    M = torch.cat((torch.cat((GGT, e), dim=1),
+                   torch.cat((e.T, torch.zeros((1, 1), device=device)), dim=1)), dim=0)  # [k+1, k+1]
+    z = torch.cat((-GGT @ c, torch.tensor([1 - c.sum()], device=c.device)))   # [k+1]
+    w_hat = torch.linalg.solve(M, z)[:-1]   # [k]
+    w_hat = w_hat.cpu().numpy()
+
+    # 3. 投影到非负+和=1+下界  对应 active_set
+    cons = {'type': 'eq', 'fun': lambda x: np.sum(x) - 1}
+    bounds = [(0, None) for _ in range(k)]
+    result = minimize(lambda x: np.linalg.norm(x - w_hat),
+                      x0=prev_w.cpu().numpy(),
+                      method='SLSQP',
+                      bounds=bounds,
+                      constraints=cons)
+    w_new = torch.from_numpy(result.x).to(device) + c   # 补偿下限
+    return w_new
+
+
+class ParetoEfficientLoss(nn.Module):
+    def __init__(self, loss_weight_low_bound, share_model, eps):
+        super().__init__()
+        self.share_model = share_model
+        self.low_bound = loss_weight_low_bound
+        self.w = None
+        self.eps = eps
+
+    def forward(self, loss_dict):
+        c = torch.tensor([self.low_bound] * len(loss_dict), device=next(self.share_model.parameters()).device)
+        if self.w is None:
+            self.w = torch.ones(len(loss_dict), device=c.device) / len(loss_dict)
+        if self.training:
+            self.w = pareto_efficient_weights(loss_dict, list(self.share_model.parameters()), c,
+                                              prev_w=self.w, ggt_eps=self.eps)
+        else:
+            logger.info(f'validation: current weight: {self.w}.')
+        total_loss = sum(w * loss_dict[k] for w, k in zip(self.w, loss_dict.keys()))
+        loss_dict['loss'] = total_loss
+        return loss_dict
+
+
 class TotalLoss(nn.Module):
-    def __init__(self, ch, num_classes, clf_path, vgg_layers, cov_k, cov_eps, dropout, loss_weights):
+    def __init__(self, ch, num_classes, clf_path, vgg_layers, cov_k, cov_eps, dropout, low_bound, ggt_eps):
         super().__init__()
         vgg = VGG19Binary(dropout=dropout, num_classes=num_classes).features
         vgg.eval()
         for p in vgg.parameters():
             p.requires_grad = False
-        ckpt = torch.load(clf_path)
-        state_dict = {k.replace('model.', ''): v for k, v in ckpt['state_dict'].items() if k.startswith('model.')}
+
         self.clf = VGG19Binary(dropout=dropout, num_classes=num_classes)
-        self.clf.load_state_dict(state_dict)
+        if os.path.exists(clf_path):
+            ckpt = torch.load(clf_path)
+            state_dict = {k.replace('model.', ''): v for k, v in ckpt['state_dict'].items() if k.startswith('model.')}
+            self.clf.load_state_dict(state_dict)
+        else:
+            logger.info(f"Warning: clf_path {clf_path} does not exist. Using untrained classifier.")
         self.clf.eval()
         for p in self.clf.parameters():
             p.requires_grad = False
@@ -416,9 +511,12 @@ class TotalLoss(nn.Module):
         self.cov_loss = CovLoss(cov_k, cov_eps)
         self.bce = nn.BCEWithLogitsLoss()
         self.ce = nn.CrossEntropyLoss()
-        self.register_buffer('loss_weights', torch.tensor(loss_weights))
+        self.pareto = ParetoEfficientLoss(low_bound, share_model=None, eps=ggt_eps)  # share_model later set externally
 
-    def forward(self, recon_img, super_img, z_subset_score, z, disc_z, altered_z, raw_img, gt_altered):
+    def forward(self, recon_img, super_img, z_subset_score, z, disc_z, altered_z, pert_x, raw_img, gt_altered):
+        disc_z = disc_z.reshape(disc_z.size(0) * 2, -1)
+        disc_label = torch.zeros_like(disc_z)
+        disc_label[:disc_z.size(0), 0] = 1.0
         loss_dt = {
             'vgg_recon': self.imagenet_perceptual_loss(raw_img, recon_img),
             'clf_recon': self.clf_perceptual_loss(raw_img, recon_img),
@@ -426,12 +524,11 @@ class TotalLoss(nn.Module):
             'clf_super': self.clf_perceptual_loss(super_img, raw_img),
             'cov': self.cov_loss(z),
             'z_mean_var': z_mean_var_loss(z),
-            'adv': self.bce(disc_z, torch.ones_like(disc_z)),
+            'adv': self.bce(disc_z, disc_label),
             'clf_score': js_loss(z_subset_score, self.clf(raw_img)),
-            'alter': self.ce(altered_z, gt_altered.float())
+            'alter': self.ce(altered_z, gt_altered.long())  # or .float()
         }
-        total_loss = sum(w * loss_dt[k] for w, k in zip(self.loss_weights, loss_dt.keys()))
-        loss_dt['loss'] = total_loss
+        loss_dt = self.pareto(loss_dt)
         return loss_dt
 
 
@@ -446,8 +543,9 @@ if __name__ == '__main__':
     loss_fn = TotalLoss(clf_path='/media/lai/cbe9a31e-b62c-4de2-b86d-3d6ea08c8013/Ross/exp_results/DISCOVER/2025-09-20_14-51-49_job/lightning_logs/version_0/checkpoints/last.ckpt',
         ch=3, num_classes=2, vgg_layers=('3', '8', '13', '18', '23', '28', '33'),
         cov_k=10, cov_eps=1e-4, dropout=0.5,
-        loss_weights=[1, 1, 1, 1, 1, 1, 0.1, 1, 1]
+        low_bound=0.05, ggt_eps=1e-6
     ).cuda()
+    loss_fn.pareto.share_model = model.encoder
 
     out = model(img, pert)
     for item in out:
@@ -457,4 +555,5 @@ if __name__ == '__main__':
         print(f"{k}: {v.item()}")
     from torchinfo import summary
     summary(model, input_size=[(2, 3, 64, 64), (2, 350)])
-    summary(loss_fn, input_size=[(2, 3, 64, 64), (2, 3, 64, 64), (2, 2), (2, 350), (2, 2), (2, 350), (2, 3, 64, 64), (2,)])
+    # torchinfo will set requires_grad=False for all parameters, so don't use it to test loss_fn
+    summary(loss_fn, input_size=[(2, 3, 64, 64), (2, 3, 64, 64), (2, 2), (2, 350), (2, 2), (2, 350), (2, 3, 64, 64), (2, 3, 64, 64), (2,)])

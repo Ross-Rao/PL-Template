@@ -44,7 +44,8 @@ criterion:
     cov_k: 10
     cov_eps: 1e-4
     dropout: 0.5
-    loss_weights: [1, 1, 1, 1, 1, 1, 1, 1, 1]
+    low_bound: 0.05
+    ggt_eps: 1e-6
 optimizer:
   optimizer: Adam
   optimizer_params:

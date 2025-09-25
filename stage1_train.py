@@ -83,11 +83,21 @@ def main(cfg: DictConfig):
                         **optimizer_config, **lr_scheduler_config, **extra_config)
     logger.info("model built.")
 
-    trainer.fit(model, data_module, ckpt_path=cfg.get("ckpt_path", None))
-    logger.info("training finished.")
+    if cfg.get('train', True):
+        trainer.fit(model, data_module, ckpt_path=cfg.get("ckpt_path", None))
+        logger.info("training finished.")
 
-    ckpt_path = os.path.join(trainer.logger.log_dir, 'checkpoints')
-    version_number = os.path.basename(trainer.logger.log_dir).split('_')[-1]
+    # test part
+    if cfg.get('train', True):
+        test_ckpt_dir = trainer.logger.log_dir
+    else:
+        test_ckpt_dir = os.path.join(cfg.get("ckpt_path", ""), "lightning_logs", "version_0")
+    if not os.path.exists(test_ckpt_dir):
+        raise FileNotFoundError(f"Checkpoint directory {test_ckpt_dir} does not exist.")
+
+    ckpt_path = os.path.join(test_ckpt_dir, 'checkpoints')
+    version_number = os.path.basename(test_ckpt_dir).split('_')[-1]
+
     for v, ckpt_file in enumerate(os.listdir(ckpt_path)):
         # Create a new TensorBoardLogger with a specific version
         tb_logger = TensorBoardLogger(save_dir=work_dir, version=f'version_{version_number}_test_{v}')

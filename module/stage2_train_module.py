@@ -145,6 +145,7 @@ class TrainModule(pl.LightningModule):
         # --------------------------------------------------------------------------------------- #
         # assert 0 and kwargs.keys(), "add extra config here, please check your code"
         self.latent_dim = kwargs.get('latent_dim', 128)
+        self.criterion.pareto.share_model = self.model.encoder
         # --------------------------------------------------------------------------------------- #
 
     def configure_optimizers(self):
@@ -252,6 +253,51 @@ class TrainModule(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         y, y_hat = self.model_step(batch, batch_idx)
         self._update_metrics(y_hat[1:3], (y[0], batch['label'].as_tensor()), "test")
+        # explain part start here
+        recon_img, super_img = y_hat[0], y_hat[1]
+        # log a batch of images
+        self.logger.experiment.add_images(f"test_recon_img/{batch_idx}",
+                                          recon_img.reshape(-1, 1, *recon_img.shape[2:]), self.current_epoch,
+                                          dataformats='NCHW')
+        self.logger.experiment.add_images(f"test_super_img/{batch_idx}",
+                                          super_img.reshape(-1, 1, *super_img.shape[2:]), self.current_epoch,
+                                          dataformats='NCHW')
+        raw_img = y[0]
+        pert_vec = torch.cat([torch.eye(14, device=raw_img.device), torch.zeros(14, 350 - 14, device=raw_img.device)], dim=1)
+        pert_vec = pert_vec.repeat(raw_img.shape[0], 1) * 1
+        raw_img = torch.repeat_interleave(raw_img, repeats=14, dim=0)
+        pert_img = self.model(raw_img, pert_vec)[-1] - raw_img
+        def tensor_to_cmap_mask(tensor_4d, raw_img_4d, alpha=0.5, cmap='jet', nrow=14):
+            """
+            tensor_4d : (N,1,H,W)  权重/响应图  0-1
+            raw_img_4d: (N,1,H,W)  原图 灰度     0-1
+            alpha     : 热力图透明度
+            return    : (3,H*,W*)  叠加图 RGB  0-1
+            """
+            import matplotlib.cm as cm
+            from torchvision.utils import make_grid
+
+            # 1. 权重图 cmap → (N,H,W,3)
+            weight_3d = tensor_4d.squeeze(1).cpu()
+            w_min = weight_3d.amin(dim=(1, 2), keepdim=True)
+            w_max = weight_3d.amax(dim=(1, 2), keepdim=True)
+            weight_3d = (weight_3d - w_min) / (w_max - w_min + 1e-8)  # (N,H,W)
+            colored = cm.get_cmap(cmap)(weight_3d.numpy())[..., :3]   # (N,H,W,3)
+            colored = torch.from_numpy(colored).float()
+
+            # 2. 原图灰度 → RGB（复制通道）
+            raw_gray = raw_img_4d.squeeze(1).cpu()                   # (N,H,W)
+            raw_rgb  = raw_gray.unsqueeze(-1).expand(-1, -1, -1, 3)  # (N,H,W,3)
+
+            # 4. 加权混合
+            blended = alpha * colored + (1 - alpha) * raw_rgb
+            blended = blended.clamp(0, 1)
+            return make_grid(blended.permute(0, 3, 1, 2), nrow=nrow)
+
+        self.logger.experiment.add_images(f"test_pert_img/{batch_idx}",
+                                          tensor_to_cmap_mask(pert_img.reshape(-1, 1, *pert_img.shape[2:]),
+                                                              raw_img.reshape(-1, 1, *raw_img.shape[2:])),
+                                          self.current_epoch, dataformats='CHW')
 
     def on_train_epoch_end(self):
         train_loss = self.trainer.callback_metrics.get('train/loss')

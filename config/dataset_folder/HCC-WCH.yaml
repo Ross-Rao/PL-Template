@@ -48,15 +48,15 @@ mixup:
 dataloader:
   train_loader:
     shuffle: True
-    batch_size: 4
+    batch_size: 1
     num_workers: 6
     pin_memory: true
     persistent_workers: true
   val_loader:
     shuffle: False
     num_workers: 6
-    batch_size: 4
+    batch_size: 1
   test_loader:
     shuffle: False
     num_workers: 6
-    batch_size: 4
+    batch_size: 1
