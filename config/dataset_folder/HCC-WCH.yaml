@@ -1,6 +1,7 @@
 # HCC-WCH dataset
 
 img_size: 64
+channel: 3
 name: 'HCC-WCH'
 dataset:
   data_dir: '${oc.env:DATASET_LOCATION, ./data}/manual_wch_scaled_roi64'
@@ -17,7 +18,7 @@ dataset:
   split_cols: ['patient_id']
   shuffle: True
   seed: 42
-  use_existing_split: False
+  use_existing_split: True
   reset_split_index: True
   dataset: 'Dataset'  # class
   dataset_params:
@@ -26,7 +27,7 @@ dataset:
       keys: ['image']
     ExtractSlicesD:
       keys: ["image"]
-      k: 7
+      k: '${dataset_folder.channel}'
       dim: -1
     EnsureChannelFirstD:
       keys: ["image"]
@@ -37,14 +38,14 @@ dataset:
       mode: "nearest"
     ScaleIntensityD:
       keys: ['image']
-      minv: 0.0
+      minv: -1.0
       maxv: 1.0
     "AsDiscreteD":
       keys: ["label"]
       to_onehot: 2
 mixup:
-  mixup_ratio: 25
-  mixup_keys: ['image', 'label']
+#  mixup_ratio: 25
+#  mixup_keys: ['image', 'label']
 dataloader:
   train_loader:
     shuffle: True

@@ -111,9 +111,9 @@ class TrainModule(pl.LightningModule):
             "auc": AUROC(**multi_cls_param),
         }, prefix="train/")
         self._train_recon_metrics = MetricCollection({
-            "psnr": PeakSignalNoiseRatio(),
-            "ssim": StructuralSimilarityIndexMeasure(),
-            "lpips": LearnedPerceptualImagePatchSimilarity(),
+            # "psnr": PeakSignalNoiseRatio(),
+            # "ssim": StructuralSimilarityIndexMeasure(),
+            # "lpips": LearnedPerceptualImagePatchSimilarity(),
             "recon_mae": MeanAbsoluteError(),
             "recon_mse": MeanSquaredError(),
         }, prefix="train/")
@@ -143,7 +143,8 @@ class TrainModule(pl.LightningModule):
             'test': self._test_reg_metrics,
         }
         # --------------------------------------------------------------------------------------- #
-        assert 0 and kwargs.keys(), "add extra config here, please check your code"
+        # assert 0 and kwargs.keys(), "add extra config here, please check your code"
+        self.n_steps = kwargs.get('n_steps')
         # --------------------------------------------------------------------------------------- #
 
     def configure_optimizers(self):
@@ -165,8 +166,11 @@ class TrainModule(pl.LightningModule):
             return batch[0], batch[1]
         elif isinstance(batch, dict):
             # --------------------------------------------------------------------------------------- #
-            assert 0, "configure your input here, please check your code"
-            return self, batch
+            # assert 0, "configure your input here, please check your code"
+            image = batch['image'].as_tensor()
+            t = torch.randint(0, self.n_steps, (self.get_batch_size(batch), 1)).to(image.device)
+            eps = torch.randn_like(image).to(image.device)
+            return (image, t, eps), eps
             # --------------------------------------------------------------------------------------- #
         else:
             raise ValueError('Invalid batch type')
@@ -184,8 +188,9 @@ class TrainModule(pl.LightningModule):
         x, y = self.get_batch(batch)
         model_params = x if isinstance(x, tuple) else (x,)
         # --------------------------------------------------------------------------------------- #
-        assert 0, "execute your model with your input here, please check your code"
-        y_hat = self.model(*model_params)
+        # assert 0, "execute your model with your input here, please check your code"
+        x_t = self.model[0].sample_forward(*model_params)
+        y_hat = self.model[1](x_t, model_params[1])
         # --------------------------------------------------------------------------------------- #
         return y, y_hat
 
@@ -193,7 +198,7 @@ class TrainModule(pl.LightningModule):
     def criterion_step(self, y, y_hat):
         criterion_params = (y_hat if isinstance(y_hat, tuple) else (y_hat,)) + (y if isinstance(y, tuple) else (y,))
         # --------------------------------------------------------------------------------------- #
-        assert 0, "add your own code here to match the output with loss, please check your code"
+        # assert 0, "add your own code here to match the output with loss, please check your code"
         # be sure that y_hat params first and y params later in your criterion function
         loss = self.criterion(*criterion_params)
         # --------------------------------------------------------------------------------------- #
@@ -315,5 +320,5 @@ class TrainModule(pl.LightningModule):
         for metric_name, metric in self.recon_metrics[stage].items():
             if metric_name != f"{stage}/lpips":
                 metric.update(y_hat, y)
-        # 单独更新lpips
-        self.recon_metrics[stage]["lpips"].update(y_hat_lpips, y_lpips)
+            else:
+                self.recon_metrics[stage]["lpips"].update(y_hat_lpips, y_lpips)

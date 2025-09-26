@@ -1,0 +1,48 @@
+# IRCL model using HCC-WCH dataset
+
+callbacks:  # inline definition of callbacks, don't change the name
+  # relevant input arguments in main.py
+  ModelCheckpoint:
+    filename: "model_{epoch:02d}_{val_loss:.4f}"
+    monitor: "val_loss"  # log in module/example_module.py
+    save_top_k: 5
+    mode: "min"
+    save_last: True
+  EarlyStopping:
+    monitor: 'val_loss'
+    patience: 8
+    mode: 'min'
+    check_on_train_epoch_end: False
+  TQDMProgressBar:
+    refresh_rate: 1
+  LearningRateLogger:
+trainer:  # inline definition of trainer, don't change the name
+  max_epochs: 100
+  accelerator: 'gpu'
+  devices: 1
+  check_val_every_n_epoch: 2
+  log_every_n_steps: 2
+# module settings: used in module/example_module.py
+criterion:
+  criterion:
+    'MSELoss'
+  criterion_params:
+optimizer:
+  optimizer: Adam
+  optimizer_params:
+    lr: 1e-4
+model:
+  model:
+    - 'DDPMModule'
+    - 'PeUNet'
+  model_params:
+    - n_steps: '${model_folder.n_steps}'
+      min_beta: 0.0001
+      max_beta: 0.02
+    - shape: ['${dataset_folder.channel}', '${dataset_folder.img_size}', '${dataset_folder.img_size}']
+      channels: [64, 128, 256]
+      pe_dim: 128
+      n_steps: '${model_folder.n_steps}'
+n_steps: 1000
+extra:
+  n_steps: '${model_folder.n_steps}'
