@@ -315,5 +315,5 @@ class TrainModule(pl.LightningModule):
         for metric_name, metric in self.recon_metrics[stage].items():
             if metric_name != f"{stage}/lpips":
                 metric.update(y_hat, y)
-        # 单独更新lpips
-        self.recon_metrics[stage]["lpips"].update(y_hat_lpips, y_lpips)
+            else:
+                self.recon_metrics[stage]["lpips"].update(y_hat_lpips, y_lpips)
