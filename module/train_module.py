@@ -201,7 +201,7 @@ class TrainModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         y, y_hat = self.model_step(batch, batch_idx)
-        # self._update_metrics(y_hat, y, "train")  # not necessary, only debug
+        # self._calculate_metrics(y_hat, y, "train")  # not necessary, only debug
         loss = self.criterion_step(y, y_hat)
         return loss
 
@@ -212,7 +212,7 @@ class TrainModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         y, y_hat = self.model_step(batch, batch_idx)
-        self._update_metrics(y_hat, y, "val")
+        self._calculate_metrics(y_hat, y, "val")
 
         loss = self.criterion_step(y, y_hat)
         return loss
@@ -227,34 +227,36 @@ class TrainModule(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         y, y_hat = self.model_step(batch, batch_idx)
-        self._update_metrics(y_hat, y, "test")
+        self._calculate_metrics(y_hat, y, "test")
+
+    def _update_metrics(self, stage):
+        for metrics_dict in [self.cls_metrics[stage], self.reg_metrics[stage], self.recon_metrics[stage]]:
+            for metric_name, metric in metrics_dict.items():
+                # re-comment `update_metrics` in training_step if you want to use this
+                if metric.update_count > 0:
+                    res = metric.compute()
+                    if metric_name == f'{stage}/is':
+                        self.log(f"{metric_name}_mean", res[0], prog_bar=True)
+                        self.log(f"{metric_name}_std", res[1], prog_bar=True)
+                    else:
+                        self.log(metric_name, res, prog_bar=True)
+                    if stage in ['val', 'test']:
+                        logger.info(f"Epoch {self.current_epoch} - {metric_name}: {res}")
+                    metric.reset()
 
     def on_train_epoch_end(self):
         train_loss = self.trainer.callback_metrics.get('train/loss')
         if train_loss is not None:
             self.log('train_loss', train_loss)  # train_loss is the key for callback
             logger.info(f"\nEpoch {self.current_epoch} - train_loss: {train_loss}")  # print train loss to log file
-        # not necessary, only debug
-        for metrics_dict in [self.cls_metrics['train'], self.reg_metrics['train'], self.recon_metrics['train']]:
-            for metric_name, metric in metrics_dict.items():
-                # re-comment `update_metrics` in training_step if you want to use this
-                if metric.update_count > 0:
-                    res = metric.compute()
-                    self.log(metric_name, res, prog_bar=True)
-                    metric.reset()
+        self._update_metrics('train')  # not necessary, only debug
 
     def on_validation_epoch_end(self):
         val_loss = self.trainer.callback_metrics.get('val/loss')
         if val_loss is not None:
             self.log('val_loss', val_loss)  # val_loss is the key for callback
             logger.info(f"\nEpoch {self.current_epoch} - val_loss: {val_loss}")  # print val loss to log file
-        for metrics_dict in [self.cls_metrics['val'], self.reg_metrics['val'], self.recon_metrics['val']]:
-            for metric_name, metric in metrics_dict.items():
-                if metric.update_count > 0:
-                    res = metric.compute()
-                    self.log(metric_name, res, prog_bar=True)
-                    logger.info(f"Epoch {self.current_epoch} - {metric_name}: {res}")
-                    metric.reset()
+        self._update_metrics('val')
 
     def on_test_epoch_end(self):
         if self.confusion_matrix.update_count > 0:
@@ -263,15 +265,9 @@ class TrainModule(pl.LightningModule):
             self.logger.experiment.add_figure(f"test_confusion_matrix", plt)
             logger.info(f"Confusion Matrix:\n{cm}")
             self.confusion_matrix.reset()
-        for metrics_dict in [self.cls_metrics['test'], self.reg_metrics['test'], self.recon_metrics['test']]:
-            for metric_name, metric in metrics_dict.items():
-                if metric.update_count > 0:
-                    res = metric.compute()
-                    self.log(metric_name, res, prog_bar=True)
-                    logger.info(f"{metric_name}: {res}")
-                    metric.reset()
+        self._update_metrics('test')
 
-    def _update_metrics(self, y_hat_tp, y_tp, stage):
+    def _calculate_metrics(self, y_hat_tp, y_tp, stage):
         # ensure matched y and y_hat is same
         # zip will stop at the shortest length
         y_hat_tp = y_hat_tp if isinstance(y_hat_tp, tuple) else (y_hat_tp,)
@@ -306,14 +302,23 @@ class TrainModule(pl.LightningModule):
         self.cls_metrics[stage].update(probs, y)
 
     def _image_reconstruction_metrics(self, y_hat, y, stage):
-        # input range is [0, 1], adjust to [-1, 1] for LPIPS
-        y_hat_lpips = y_hat.repeat(1, 3, 1, 1) * 2 - 1 if y_hat.size(1) == 1 else y_hat * 2 - 1
-        y_lpips = y.repeat(1, 3, 1, 1) * 2 - 1 if y.size(1) == 1 else y * 2 - 1
-        y_hat_lpips = torch.clamp(y_hat_lpips, -1, 1)
-
-        # 更新其他指标
         for metric_name, metric in self.recon_metrics[stage].items():
-            if metric_name != f"{stage}/lpips":
-                metric.update(y_hat, y)
-            else:
+            if metric_name == f"{stage}/lpips":
+                # input range is [0, 1], adjust to [-1, 1] for LPIPS
+                y_hat_lpips = y_hat.repeat(1, 3, 1, 1) * 2 - 1 if y_hat.size(1) == 1 else y_hat * 2 - 1
+                y_lpips = y.repeat(1, 3, 1, 1) * 2 - 1 if y.size(1) == 1 else y * 2 - 1
+                y_hat_lpips = torch.clamp(y_hat_lpips, -1, 1)
                 self.recon_metrics[stage]["lpips"].update(y_hat_lpips, y_lpips)
+            elif metric_name == f"{stage}/fid":
+                y_hat_fid = y_hat.repeat(1, 3, 1, 1) if y_hat.size(1) == 1 else y_hat
+                y_fid = y.repeat(1, 3, 1, 1) if y.size(1) == 1 else y
+                y_hat_fid = (((y_hat_fid + 1) / 2).clamp(0, 1) * 255).byte() if y_hat_fid.dtype != torch.uint8 else y_hat_fid
+                y_fid = (((y_fid + 1) / 2).clamp(0, 1) * 255).byte() if y_fid.dtype != torch.uint8 else y_fid
+                self.recon_metrics[stage]["fid"].update(y_hat_fid, real=False)
+                self.recon_metrics[stage]["fid"].update(y_fid, real=True)
+            elif metric_name == f"{stage}/is":
+                y_hat_is = y_hat.repeat(1, 3, 1, 1) if y_hat.size(1) == 1 else y_hat
+                y_hat_is = (((y_hat_is + 1) / 2).clamp(0, 1) * 255).byte() if y_hat_is.dtype != torch.uint8 else y_hat_is
+                self.recon_metrics[stage]["is"].update(y_hat_is)
+            else:
+                metric.update(y_hat, y)
