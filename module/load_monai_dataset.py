@@ -48,7 +48,7 @@ def load_data_from_split_to_monai_dataset(
     val_data = val_df.reset_index().to_dict(orient="records")
     test_data = test_df.reset_index().to_dict(orient="records")
 
-    # Transform settings
+    # Transform settings for train dataset
     if transform is None:
         transform_ops = monai_transforms.Compose([monai_transforms.ToTensor()])
     else:
@@ -57,7 +57,7 @@ def load_data_from_split_to_monai_dataset(
         transforms_lt = get_unique_attr_across([custom_transforms, monai_transforms, monai.data], transform)
         transform_ops = monai_transforms.Compose(transforms_lt)
 
-    # Pre-transform settings
+    # Transform settings for val and test dataset
     if val_test_transform is None:
         vt_transform_pos = transform_ops
     else:
