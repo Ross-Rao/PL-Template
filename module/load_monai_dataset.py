@@ -23,8 +23,8 @@ def load_data_from_split_to_monai_dataset(
         load_dir: str,
         primary_key: str,
         fold: int,
-        pre_transform: Union[dict[str, ...], None] = None,
         transform: Union[dict[str, ...], None] = None,
+        val_test_transform: Union[dict[str, ...], None] = None,
         dataset: str = 'Dataset',
         dataset_params: Union[dict[str, str], None] = None,
         train_file_name: str = "train_{0}.csv",
@@ -53,15 +53,16 @@ def load_data_from_split_to_monai_dataset(
         transform_ops = monai_transforms.Compose([monai_transforms.ToTensor()])
     else:
         # if you want to use your own transform, you can add them to utils/custom_transforms.py
-        # they will be imported by get_multi_attr
+        # they will be imported by get_unique_attr_across
         transforms_lt = get_unique_attr_across([custom_transforms, monai_transforms, monai.data], transform)
         transform_ops = monai_transforms.Compose(transforms_lt)
 
     # Pre-transform settings
-    if pre_transform:
-        transforms_lt = get_unique_attr_across([custom_transforms, monai_transforms, monai.data], pre_transform)
-        pre_transform = monai_transforms.Compose(transforms_lt)
-        train_data, val_data, test_data = pre_transform(train_data), pre_transform(val_data), pre_transform(test_data)
+    if val_test_transform is None:
+        vt_transform_pos = transform_ops
+    else:
+        transforms_lt = get_unique_attr_across([custom_transforms, monai_transforms, monai.data], val_test_transform)
+        vt_transform_pos = monai_transforms.Compose(transforms_lt)
 
     # Create MONAI Datasets
     assert dataset in AVAILABLE_DATASET_TYPE_LIST, f"dataset must be one of {AVAILABLE_DATASET_TYPE_LIST}"
@@ -72,8 +73,8 @@ def load_data_from_split_to_monai_dataset(
 
     dataset_class = partial(getattr(monai.data, dataset), **dataset_params)
     train_dataset = dataset_class(data=train_data, transform=transform_ops)
-    val_dataset = dataset_class(data=val_data, transform=transform_ops)
-    test_dataset = dataset_class(data=test_data, transform=transform_ops)
+    val_dataset = dataset_class(data=val_data, transform=vt_transform_pos)
+    test_dataset = dataset_class(data=test_data, transform=vt_transform_pos)
 
     return train_dataset, val_dataset, test_dataset
 
@@ -92,8 +93,8 @@ def load_monai_dataset(
     seed: int = 42,
     use_existing_split: bool = False,
     reset_split_index: bool = True,
-    pre_transform: Union[dict[str, ...], None] = None,
     transform: Union[dict[str, ...], None] = None,
+    val_test_transform: Union[dict[str, ...], None] = None,
     dataset: str = 'Dataset',
     dataset_params: Union[dict[str, str], None] = None,
     train_file_name: str = "train_{0}.csv",
@@ -121,8 +122,8 @@ def load_monai_dataset(
         load_dir=split_save_dir,
         primary_key=primary_key,
         fold=fold,
-        pre_transform=pre_transform,
         transform=transform,
+        val_test_transform=val_test_transform,
         dataset=dataset,
         dataset_params=dataset_params,
         train_file_name=train_file_name,
