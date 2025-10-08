@@ -73,6 +73,7 @@ def main(cfg: DictConfig):
 
     model_config, criterion_config = cfg.get("model_folder").get("model"), cfg.get("model_folder").get("criterion")
     optimizer_config, lr_scheduler_config = cfg.get("model_folder").get("optimizer"), cfg.get("model_folder").get("lr_scheduler", {})
+    model_config['model_params'][0]['n_samples'] = len(data_module.train_dataset) * cfg.get("dataset_folder").get('channel')  # externally added
     extra_config = cfg.get("model_folder").get("extra", {})
     if cfg.get('num_classes', False):
         logger.info("Overriding num_classes in model config with cfg.num_classes")

@@ -143,7 +143,10 @@ class TrainModule(pl.LightningModule):
             'test': self._test_reg_metrics,
         }
         # --------------------------------------------------------------------------------------- #
-        assert 0 and kwargs.keys(), "add extra config here, please check your code"
+        # assert 0 and kwargs.keys(), "add extra config here, please check your code"
+        self.max_search_ratio = kwargs.get('max_search_ratio', 1)
+        self.anchor_update_frequency = kwargs.get('anchor_update_frequency', 8)
+        self.stage_change_epoch = kwargs.get('stage_change_epoch', 80)
         # --------------------------------------------------------------------------------------- #
 
     def configure_optimizers(self):
@@ -165,8 +168,22 @@ class TrainModule(pl.LightningModule):
             return batch[0], batch[1]
         elif isinstance(batch, dict):
             # --------------------------------------------------------------------------------------- #
-            assert 0, "configure your input here, please check your code"
-            return self, batch
+            # assert 0, "configure your input here, please check your code"
+            image = batch.get('image').as_tensor()
+            index = batch.get('index')
+            b, c, h, w = image.size()
+            image = image.reshape(b * c, 1, h, w)
+            if not self.training:
+                index += 1000000
+            neighbor_index = [(c * index.unsqueeze(1) + torch.roll(torch.arange(c), i).to(image.device)).reshape(-1)
+                              for i in range(1, c)]
+            neighbor_index = torch.stack(neighbor_index, dim=1)
+            index = c * index.unsqueeze(1) + torch.arange(c).to(image.device)
+            index = index.reshape(-1)
+            x = (image, index, neighbor_index)
+            y = batch['label'].reshape(-1) if batch['label'].shape == torch.Size([b, 1]) else batch['label']
+            y = y.repeat_interleave(c, dim=0).as_tensor()
+            return x, y
             # --------------------------------------------------------------------------------------- #
         else:
             raise ValueError('Invalid batch type')
@@ -184,18 +201,47 @@ class TrainModule(pl.LightningModule):
         x, y = self.get_batch(batch)
         model_params = x if isinstance(x, tuple) else (x,)
         # --------------------------------------------------------------------------------------- #
-        assert 0, "execute your model with your input here, please check your code"
-        y_hat = self.model(*model_params)
+        # assert 0, "execute your model with your input here, please check your code"
+        if self.current_epoch < self.stage_change_epoch and self.trainer.state.stage != "test":
+            loss_dt = self.model[0](*model_params, loss=True)
+            return (), loss_dt
+        else:
+            for param in self.model[0].parameters():
+                param.requires_grad = False
+            cluster, hid_x = self.model[0](*model_params, loss=False)
+            y_hat = self.model[1](hid_x, cluster)
+            if self.trainer.state.stage != "test":
+                return y, y_hat
+            else:
+                return y, (y_hat, cluster)
         # --------------------------------------------------------------------------------------- #
-        return y, y_hat
 
+    def on_train_epoch_start(self):
+        max_search_ratio = self.max_search_ratio
+        frequency = self.anchor_update_frequency
+        stage_change_epoch = self.stage_change_epoch
+        # frequency: update anchor frequency
+        # stage_change_epoch: change stage from 1 to 2
+        if self.current_epoch == stage_change_epoch:
+            self.model[0].get_all_cluster()
+            self.trainer.optimizers = [self.optimizer[1]]
+
+        # on_train_epoch_start may not suitable for update model parameters, maybe works for buffer update
+        # we update anchor in training_step with anchor_update_frequency
+        update_epoch = [i for i in range(frequency, stage_change_epoch - frequency + 1, frequency)]
+        if self.current_epoch in update_epoch:
+            search_ratio = self.current_epoch / (stage_change_epoch - frequency) * max_search_ratio
+            self.model[0].update_anchor(search_rate=search_ratio)
 
     def criterion_step(self, y, y_hat):
         criterion_params = (y_hat if isinstance(y_hat, tuple) else (y_hat,)) + (y if isinstance(y, tuple) else (y,))
         # --------------------------------------------------------------------------------------- #
-        assert 0, "add your own code here to match the output with loss, please check your code"
+        # assert 0, "add your own code here to match the output with loss, please check your code"
         # be sure that y_hat params first and y params later in your criterion function
-        loss = self.criterion(*criterion_params)
+        if self.current_epoch < self.stage_change_epoch and self.trainer.state.stage != "test":
+            loss = self.criterion[0](*criterion_params)
+        else:
+            loss = self.criterion[1](*criterion_params)
         # --------------------------------------------------------------------------------------- #
         return loss
 
@@ -296,7 +342,7 @@ class TrainModule(pl.LightningModule):
 
     def _multiclass_classification_metrics(self, y_hat, y, stage):
         # --------------------------------------------------------------------------------------- #
-        assert 0, "your model only needs to return logits, please check your code"
+        # assert 0, "your model only needs to return logits, please check your code"
         probs = torch.softmax(y_hat, dim=1)
         # --------------------------------------------------------------------------------------- #
         self.cls_metrics[stage].update(probs, y)
