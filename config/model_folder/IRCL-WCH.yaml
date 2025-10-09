@@ -33,16 +33,18 @@ criterion:
     -
     - num_classes: '${num_classes}'
       cls_class_ratio: 0.5
+stage1_lr: 1e-5
+stage2_lr: 5e-5
 optimizer:
   optimizer:
     - Adam
     - Adam
   optimizer_params:
-    - lr: [5e-5, 5e-5, 5e-5, 5e-5]
+    - lr: ['${model_folder.stage1_lr}', '${model_folder.stage1_lr}', '${model_folder.stage1_lr}', '${model_folder.stage1_lr}']
       params: ['unet', 'pool', 'fc', 'mc']
       model_id: [0, 0, 0, 0]
       betas: [0.9, 0.999]
-    - lr: [1e-5, 1e-5, 1e-5, 1e-5, 1e-5, 1e-5]
+    - lr: ['${model_folder.stage2_lr}', '${model_folder.stage2_lr}', '${model_folder.stage2_lr}', '${model_folder.stage2_lr}', '${model_folder.stage2_lr}', '${model_folder.stage2_lr}']
       params: ['fc2', 'fc3', 'cls_token', 'position', 'transformer', 'cls_head']
       model_id: [1, 1, 1, 1, 1, 1]
       betas: [0.9, 0.999]

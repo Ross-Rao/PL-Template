@@ -21,7 +21,7 @@ load_image: &LOAD
 normalize: &NORM
   ScaleIntensityD:
     keys: ['image']
-    minv: -1.0
+    minv: 0.0
     maxv: 1.0
   AsDiscreteD:
     keys: ["label"]
