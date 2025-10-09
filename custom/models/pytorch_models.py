@@ -562,3 +562,34 @@ class Stage2ModelLoss(nn.Module):
 #             loss = torch.sum(loss, dim=1)
 #         loss = torch.mean(loss)
 #         return loss
+
+
+if __name__ == "__main__":
+    from thop import profile, clever_format
+
+    # test model
+    model = Stage1Model(n_samples=1000, encoder_in_channels=1, encoder_out_channels=1, perceptual_loss_ratio=0.1)
+    x = torch.randn(10, 1, 64, 64)
+    index = torch.randint(0, 1000, (10,))
+    local_neighbor_indices = torch.randint(0, 1000, (10, 5))
+
+    loss_dt = model(x, index, local_neighbor_indices)
+    print(loss_dt)
+    model.get_all_cluster()
+
+    flops, params = profile(model, inputs=(x, index, local_neighbor_indices))      # 返回纯数字
+    print(clever_format([flops, params], "%.3f"))
+
+    model2 = Stage2Model(n_cluster=10, seq_len=3, num_classes=2)
+    hid_x = torch.randn(9, 512)
+    clusters = torch.randint(0, 10, (9,))
+    pred_cls = model2(hid_x, clusters)
+    print(pred_cls.shape)
+
+    flops, params = profile(model2, inputs=(hid_x, clusters))      # 返回纯数字
+    print(clever_format([flops, params], "%.3f"))
+
+    criterion2 = Stage2ModelLoss(num_classes=2)
+    cls = torch.randint(0, 2, (9,))
+    loss2 = criterion2(pred_cls, cls)
+    print(loss2)
