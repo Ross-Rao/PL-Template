@@ -1,7 +1,32 @@
 # HCC-WCH dataset
 
+# 公共锚点
 img_size: 64
+channel: 7
 name: 'HCC-WCH'
+load_image: &LOAD
+  LoadImaged:
+    keys: ['image']
+  ExtractSlicesD:
+    keys: ["image"]
+    k: '${dataset_folder.channel}'
+    dim: -1
+  EnsureChannelFirstD:
+    keys: ["image"]
+    channel_dim: -1
+  Resized:
+    keys: ["image"]
+    spatial_size: ['${dataset_folder.img_size}', '${dataset_folder.img_size}']
+    mode: "nearest"
+normalize: &NORM
+  ScaleIntensityD:
+    keys: ['image']
+    minv: -1.0
+    maxv: 1.0
+  AsDiscreteD:
+    keys: ["label"]
+    to_onehot: 2
+
 dataset:
   data_dir: '${oc.env:DATASET_LOCATION, ./data}/manual_wch_scaled_roi64'
   primary_key: 'image'
@@ -17,34 +42,24 @@ dataset:
   split_cols: ['patient_id']
   shuffle: True
   seed: 42
-  use_existing_split: False
+  use_existing_split: True
   reset_split_index: True
   dataset: 'Dataset'  # class
   dataset_params:
   transform:
-    LoadImaged:
+    <<: *LOAD
+    RandRotateD:
       keys: ['image']
-    ExtractSlicesD:
-      keys: ["image"]
-      k: 7
-      dim: -1
-    EnsureChannelFirstD:
-      keys: ["image"]
-      channel_dim: -1
-    Resized:
-      keys: ["image"]
-      spatial_size: ['${dataset_folder.img_size}', '${dataset_folder.img_size}']
-      mode: "nearest"
-    ScaleIntensityD:
-      keys: ['image']
-      minv: 0.0
-      maxv: 1.0
-    "AsDiscreteD":
-      keys: ["label"]
-      to_onehot: 2
+      range_x: 0.3
+      prob: 0.5
+    <<: *NORM
+  val_test_transform:
+    <<: *LOAD
+    <<: *NORM
+
 mixup:
-  mixup_ratio: 25
-  mixup_keys: ['image', 'label']
+#  mixup_ratio: 25
+#  mixup_keys: ['image', 'label']
 dataloader:
   train_loader:
     shuffle: True

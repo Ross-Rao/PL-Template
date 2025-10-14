@@ -13,6 +13,9 @@ from utils.cls_metrics import ClassificationMetrics
 from utils.regression_metrics import RegressionMetrics
 from utils.reconstruction_metrics import ReconstructionMetrics
 from utils.generation_metrics import GenerationMetrics
+# extra import
+from copy import deepcopy
+from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 
 
 logger = logging.getLogger(__name__)
@@ -45,7 +48,10 @@ class TrainModule(pl.LightningModule):
         self.reg_metrics = RegressionMetrics()
         self.gen_metrics = GenerationMetrics(fid_feature=2048)
         # --------------------------------------------------------------------------------------- #
-        assert 0 and kwargs.keys(), "add extra config here, please check your code"
+        # assert 0 and kwargs.keys(), "add extra config here, please check your code"
+        self.n_steps = kwargs.get('n_steps')
+        self.ema_model = AveragedModel(self.model[1], multi_avg_fn=get_ema_multi_avg_fn(kwargs.get('ema_decay')))
+        self._original_state = None
         # --------------------------------------------------------------------------------------- #
 
     def _calculate_metrics(self, y_hat_tp, y_tp, stage):
@@ -95,8 +101,12 @@ class TrainModule(pl.LightningModule):
             return batch[0], batch[1]
         elif isinstance(batch, dict):
             # --------------------------------------------------------------------------------------- #
-            assert 0 and batch, "configure your input here, please check your code"
-            return self, batch
+            # assert 0 and batch, "configure your input here, please check your code"
+            image = batch['image'].as_tensor()
+            image = image.reshape(-1, 1, *image.shape[2:])
+            t = torch.randint(0, self.n_steps, (image.shape[0], 1)).to(image.device)
+            eps = torch.randn_like(image).to(image.device)
+            return (image, t, eps), eps
             # --------------------------------------------------------------------------------------- #
         else:
             raise ValueError('Invalid batch type')
@@ -114,8 +124,10 @@ class TrainModule(pl.LightningModule):
         x, y = self.get_batch(batch)
         model_params = x if isinstance(x, tuple) else (x,)
         # --------------------------------------------------------------------------------------- #
-        assert 0 and model_params, "execute your model with your input here, please check your code"
-        y_hat = self.model(*model_params)
+        # assert 0 and model_params, "execute your model with your input here, please check your code"
+        # y_hat = self.model(*model_params)
+        x_t = self.model[0].sample_forward(*model_params)
+        y_hat = self.model[1](x_t, model_params[1])
         # --------------------------------------------------------------------------------------- #
         return y, y_hat
 
@@ -123,7 +135,7 @@ class TrainModule(pl.LightningModule):
     def criterion_step(self, y, y_hat):
         criterion_params = (y_hat if isinstance(y_hat, tuple) else (y_hat,)) + (y if isinstance(y, tuple) else (y,))
         # --------------------------------------------------------------------------------------- #
-        assert 0 and criterion_params, "add your own code here to match the output with loss, please check your code"
+        # assert 0 and criterion_params, "add your own code here to match the output with loss, please check your code"
         # be sure that y_hat params first and y params later in your criterion function
         loss = self.criterion(*criterion_params)
         # --------------------------------------------------------------------------------------- #
@@ -139,6 +151,9 @@ class TrainModule(pl.LightningModule):
         # log step loss
         loss_dt = {f'train/{k}': float(v) for k, v in outputs.items()}
         self.log_dict(loss_dt, batch_size=self.get_batch_size(batch), prog_bar=True)
+        # --------------------------------------------------------------------------------------- #
+        self.ema_model.update_parameters(self.model[1])
+        # --------------------------------------------------------------------------------------- #
 
     def validation_step(self, batch, batch_idx):
         y, y_hat = self.model_step(batch, batch_idx)
@@ -158,6 +173,16 @@ class TrainModule(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         y, y_hat = self.model_step(batch, batch_idx)
         self._calculate_metrics(y_hat, y, "test")
+        # --------------------------------------------------------------------------------------- #
+        # ddpm generation
+        with torch.no_grad():
+            img = self.model[0].sample_backward((self.get_batch_size(batch), 1, 64, 64), self.model[1], simple_var=True)
+            img = ((img + 1) / 2).reshape(-1, 1, *img.shape[2:])
+            from torchvision.utils import make_grid
+            grid = make_grid(img, nrow=7)
+            self.logger.experiment.add_images(f"test_ddpm_img/{batch_idx}", grid,
+                                              self.current_epoch, dataformats='CHW')
+        # --------------------------------------------------------------------------------------- #
 
     def on_train_epoch_end(self):
         train_loss = self.trainer.callback_metrics.get('train/loss')
@@ -166,12 +191,32 @@ class TrainModule(pl.LightningModule):
             logger.info(f"\nEpoch {self.current_epoch} - train_loss: {train_loss}")  # print train loss to log file
         self._log_metrics("train")  # not necessary, only debug
 
+    # --------------------------------------------------------------------------------------- #
+    def on_validation_epoch_start(self):
+        torch.optim.swa_utils.update_bn(self.trainer.train_dataloader, self.ema_model)
+        self._original_state = deepcopy(self.model[1].state_dict())
+        self.model[1].load_state_dict(self.ema_model.module.state_dict())
+    # --------------------------------------------------------------------------------------- #
+
     def on_validation_epoch_end(self):
         val_loss = self.trainer.callback_metrics.get('val/loss')
         if val_loss is not None:
             self.log('val_loss', val_loss)  # val_loss is the key for callback
             logger.info(f"\nEpoch {self.current_epoch} - val_loss: {val_loss}")  # print val loss to log file
         self._log_metrics("val")
+        # --------------------------------------------------------------------------------------- #
+        self.model[1].load_state_dict(self._original_state)
+        # --------------------------------------------------------------------------------------- #
+
+    # --------------------------------------------------------------------------------------- #
+    def on_test_epoch_start(self):
+        torch.optim.swa_utils.update_bn(self.trainer.train_dataloader, self.ema_model)
+        self._original_state = deepcopy(self.model[1].state_dict())
+        self.model[1].load_state_dict(self.ema_model.module.state_dict())
+    # --------------------------------------------------------------------------------------- #
 
     def on_test_epoch_end(self):
         self._log_metrics("test")
+        # --------------------------------------------------------------------------------------- #
+        self.model[1].load_state_dict(self._original_state)
+        # --------------------------------------------------------------------------------------- #

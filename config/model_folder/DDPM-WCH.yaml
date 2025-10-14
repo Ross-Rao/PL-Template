@@ -1,0 +1,60 @@
+# DDPM model using HCC-WCH dataset
+
+callbacks:  # inline definition of callbacks, don't change the name
+  # relevant input arguments in main.py
+  ModelCheckpoint:
+    filename: "model_{epoch:02d}_{val_loss:.4f}"
+    monitor: "val_loss"  # log in module/example_module.py
+    save_top_k: 5
+    mode: "min"
+    save_last: True
+  EarlyStopping:
+    monitor: 'val_loss'
+    patience: 20
+    mode: 'min'
+    check_on_train_epoch_end: False
+  TQDMProgressBar:
+    refresh_rate: 1
+  LearningRateLogger:
+trainer:  # inline definition of trainer, don't change the name
+  max_epochs: 500
+  accelerator: 'gpu'
+  devices: 1
+  check_val_every_n_epoch: 5  # for val metrics and 'val/loss'
+  log_every_n_steps: 2  # for 'train/loss'
+# module settings: used in module/example_module.py
+criterion:
+  criterion:
+    'MSELoss'
+  criterion_params:
+optimizer:
+  optimizer: Adam
+  optimizer_params:
+    lr: 1e-4
+    betas: [0.9, 0.999]
+model:
+  model:
+    - 'DDPMModule'
+    - 'PeUNet'
+  model_params:
+    - n_steps: '${model_folder.n_steps}'
+      min_beta: 0.0001
+      max_beta: 0.02
+    - shape: [1, '${dataset_folder.img_size}', '${dataset_folder.img_size}']
+      channels: [64, 128, 256, 512]
+      pe_dim: 128
+      n_steps: '${model_folder.n_steps}'
+      attention_groups: 8
+lr_scheduler:
+  lr_scheduler: CosineAnnealingLR
+  lr_scheduler_params:
+    T_max: '${model_folder.trainer.max_epochs}'
+    eta_min: 1e-6
+  lr_scheduler_other_params:
+    monitor: "val_loss"
+    interval: "epoch"
+    frequency: '${model_folder.trainer.check_val_every_n_epoch}'
+n_steps: 1000
+extra:
+  n_steps: '${model_folder.n_steps}'
+  ema_decay: 0.99
