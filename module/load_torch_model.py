@@ -17,7 +17,7 @@ DEFAULT_MODULE_LIST = [
 __all__ = ["load_model"]
 
 def load_model(model_name: Union[str, list[str]],
-               model_params: Union[dict[str, ...], list[dict[str, ...]]]):
+               model_params: Union[dict[str, ...], list[dict[str, ...]]]) -> Union[torch.nn.Module, torch.nn.ModuleList]:
     assert isinstance(model_name, list) == isinstance(model_params, list), \
         "model and model_params must either both be lists or neither be lists"
 

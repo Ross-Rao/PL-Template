@@ -30,7 +30,7 @@ def read_optimizer_params(model, optimizer_params: dict):
 
 def load_optimizer(optimizer_name: Union[str, list[str]],
                    optimizer_params: Union[dict[str, ...], list[dict[str, ...]]],
-                   model):
+                   model) -> Union[torch.optim.Optimizer, list[torch.optim.Optimizer]]:
     assert isinstance(optimizer_name, list) == isinstance(optimizer_params, list), \
         "optimizer and optimizer_params must either both be lists or neither be lists"
 
