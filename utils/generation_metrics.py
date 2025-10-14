@@ -2,19 +2,17 @@
 import logging
 # package import
 import torch
-from torchmetrics import MetricCollection, MeanAbsoluteError, MeanSquaredError
-from torchmetrics.image import FrechetInceptionDistance, InceptionScore
-
+from torchmetrics import MetricCollection
+from torchmetrics.image import FrechetInceptionDistance
 # local import
 
 logger = logging.getLogger(__name__)
 __all__ = ['GenerationMetrics']
 
 class GenerationMetrics:
-    def __init__(self):
+    def __init__(self, fid_feature=2048):
         metrics = {
-            "fid": FrechetInceptionDistance(feature=2048),
-            "is": InceptionScore(splits=10),
+            "fid": FrechetInceptionDistance(feature=fid_feature),
         }
         self.metrics = {'train': MetricCollection(metrics, prefix="train/"),
                         'val': MetricCollection(metrics, prefix="val/").eval(),
@@ -29,10 +27,6 @@ class GenerationMetrics:
                 y_fid = (((y_fid + 1) / 2).clamp(0, 1) * 255).byte() if y_fid.dtype != torch.uint8 else y_fid
                 self.metrics[stage]["fid"].update(y_hat_fid, real=False)
                 self.metrics[stage]["fid"].update(y_fid, real=True)
-            elif metric_name == f"{stage}/is":
-                y_hat_is = y_hat.repeat(1, 3, 1, 1) if y_hat.size(1) == 1 else y_hat
-                y_hat_is = (((y_hat_is + 1) / 2).clamp(0, 1) * 255).byte() if y_hat_is.dtype != torch.uint8 else y_hat_is
-                self.metrics[stage]["is"].update(y_hat_is)
             else:
                 metric.update(preds, target)
 

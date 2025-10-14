@@ -12,6 +12,7 @@ from load_torch_lr_scheduler import load_lr_scheduler
 from utils.cls_metrics import ClassificationMetrics
 from utils.regression_metrics import RegressionMetrics
 from utils.reconstruction_metrics import ReconstructionMetrics
+from utils.generation_metrics import GenerationMetrics
 
 
 logger = logging.getLogger(__name__)
@@ -42,9 +43,38 @@ class TrainModule(pl.LightningModule):
         self.cls_metrics = ClassificationMetrics(num_classes=num_classes)
         self.recon_metrics = ReconstructionMetrics()
         self.reg_metrics = RegressionMetrics()
+        self.gen_metrics = GenerationMetrics(fid_feature=2048)
         # --------------------------------------------------------------------------------------- #
         assert 0 and kwargs.keys(), "add extra config here, please check your code"
         # --------------------------------------------------------------------------------------- #
+
+    def _calculate_metrics(self, y_hat_tp, y_tp, stage):
+        # ensure matched y and y_hat is same
+        # zip will stop at the shortest length
+        y_hat_tp = y_hat_tp if isinstance(y_hat_tp, tuple) else (y_hat_tp,)
+        y_tp = y_tp if isinstance(y_tp, tuple) else (y_tp,)
+
+        for y_hat, y in zip(y_hat_tp, y_tp):
+            if y_hat.shape[1] == 1:  # Regression task
+                self.reg_metrics.update(y_hat, y, stage)
+            elif y_hat.shape[1] >= 2:  # Multi-class classification task
+                self.cls_metrics.update(y_hat, y, stage)
+            elif len(y_hat.shape) == 4:
+                self.recon_metircs.update(y_hat, y, stage)  # Image reconstruction task
+                self.gen_metrics.update(y_hat, y, stage)   # Image generation task
+            else:
+                raise ValueError("Invalid shape for y_hat.")
+
+    def _log_metrics(self, stage):
+        for metric in [self.recon_metrics, self.reg_metrics, self.cls_metrics]:
+            res = metric.compute_and_reset(stage)
+            cm = res.pop('test/confusion_matrix', None)
+            if cm is not None:
+                logger.info(f"Confusion Matrix:\n{cm}")
+            if stage in ['val', 'test']:
+                self.log_dict(res, prog_bar=True)
+                for k, v in res.items():
+                    logger.info(f"{k}: {v}")
 
     def configure_optimizers(self):
         """
@@ -145,38 +175,3 @@ class TrainModule(pl.LightningModule):
 
     def on_test_epoch_end(self):
         self._log_metrics("test")
-
-    def _calculate_metrics(self, y_hat_tp, y_tp, stage):
-        # ensure matched y and y_hat is same
-        # zip will stop at the shortest length
-        y_hat_tp = y_hat_tp if isinstance(y_hat_tp, tuple) else (y_hat_tp,)
-        y_tp = y_tp if isinstance(y_tp, tuple) else (y_tp,)
-
-        for y_hat, y in zip(y_hat_tp, y_tp):
-            if len(y_hat.shape) == 2 or len(y_hat.shape) == 3:
-                if len(y_hat.shape) == 3:
-                    y_hat = y_hat.reshape(-1, y_hat.shape[-1])
-                    y = y.unsqueeze(1).repeat(1, 3).reshape(-1)
-                if y_hat.shape[1] == 1:  # Regression task
-                    self.reg_metrics.update(y_hat, y, stage)
-                elif y_hat.shape[1] >= 2:  # Multi-class classification task
-                    self.cls_metrics.update(y_hat, y, stage)
-                else:
-                    raise ValueError("Invalid shape for y_hat.")
-            elif len(y_hat.shape) == 4:  # Image reconstruction task
-                self.recon_metircs.update(y_hat, y, stage)
-
-    def _log_metrics(self, stage):
-        res = self.cls_metrics.compute_and_reset(stage)
-        if stage == "test":
-            cm = res.pop('test/confusion_matrix')
-            logger.info(f"Confusion Matrix:\n{cm}")
-        is_tuple = res.pop(f'{stage}/is', None)
-        if stage in ['val', 'test']:
-            if is_tuple is not None:
-                self.log(f"{stage}/is_mean", is_tuple[0], prog_bar=True)
-                self.log(f"{stage}/is_std", is_tuple[1], prog_bar=True)
-                logger.info(f'{stage}/is', is_tuple)
-            self.log_dict(res, prog_bar=True)
-            for k, v in res.items():
-                logger.info(f"{k}: {v}")
