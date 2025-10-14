@@ -21,6 +21,10 @@ class RegressionMetrics:
     def update(self, preds, target, stage):
         self.metrics[stage].update(preds.reshape(-1), target)
 
+    def to(self, device):
+        for v in self.metrics.values():
+            v.to(device)
+
     def compute_and_reset(self, stage):
         result_dict = {}
         for metric_name, metric in self.metrics[stage].items():

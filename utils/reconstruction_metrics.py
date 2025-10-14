@@ -23,6 +23,10 @@ class ReconstructionMetrics:
                         'val': MetricCollection(metrics, prefix="val/").eval(),
                         'test': MetricCollection(metrics, prefix="test/").eval()}
 
+    def to(self, device):
+        for v in self.metrics.values():
+            v.to(device)
+
     def update(self, preds, target, stage):
         for metric_name, metric in self.metrics[stage].items():
             if metric_name == f"{stage}/lpips":

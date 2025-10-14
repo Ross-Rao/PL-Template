@@ -22,6 +22,10 @@ class ClassificationMetrics:
                         'val': MetricCollection(metrics, prefix="val/").eval(),
                         'test': MetricCollection(metrics, prefix="test/").eval()}
 
+    def to(self, device):
+        for v in self.metrics.values():
+            v.to(device)
+
     def update(self, preds, target, stage, softmax=True):
         if preds.ndim == target.ndim:  # convert one-hot to index
             target = target.argmax(dim=-1)
