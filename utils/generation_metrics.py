@@ -18,7 +18,11 @@ class GenerationMetrics:
                         'val': MetricCollection(metrics, prefix="val/").eval(),
                         'test': MetricCollection(metrics, prefix="test/").eval()}
 
-    def update(self, preds, target, stage):
+    def to(self, device):
+        for v in self.metrics.values():
+            v.to(device)
+
+    def update(self, y_hat, y, stage):
         for metric_name, metric in self.metrics[stage].items():
             if metric_name == f"{stage}/fid":
                 y_hat_fid = y_hat.repeat(1, 3, 1, 1) if y_hat.size(1) == 1 else y_hat
@@ -28,7 +32,7 @@ class GenerationMetrics:
                 self.metrics[stage]["fid"].update(y_hat_fid, real=False)
                 self.metrics[stage]["fid"].update(y_fid, real=True)
             else:
-                metric.update(preds, target)
+                metric.update(y_hat, y)
 
     def compute_and_reset(self, stage):
         result_dict = {}

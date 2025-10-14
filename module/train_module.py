@@ -6,9 +6,9 @@ import torch
 import lightning.pytorch as pl
 from lightning.pytorch.utilities.types import STEP_OUTPUT
 # local import
-from load_torch_model import load_model
-from load_torch_optimizer import load_optimizer
-from load_torch_lr_scheduler import load_lr_scheduler
+from module.load_torch_model import load_model
+from module.load_torch_optimizer import load_optimizer
+from module.load_torch_lr_scheduler import load_lr_scheduler
 from utils.cls_metrics import ClassificationMetrics
 from utils.regression_metrics import RegressionMetrics
 from utils.reconstruction_metrics import ReconstructionMetrics
@@ -55,12 +55,12 @@ class TrainModule(pl.LightningModule):
         y_tp = y_tp if isinstance(y_tp, tuple) else (y_tp,)
 
         for y_hat, y in zip(y_hat_tp, y_tp):
-            if y_hat.shape[1] == 1:  # Regression task
+            if y_hat.shape[1] == 1 and y_hat.ndim <= 2:  # Regression task
                 self.reg_metrics.update(y_hat, y, stage)
-            elif y_hat.shape[1] >= 2:  # Multi-class classification task
+            elif y_hat.shape[1] >= 2 and y_hat.ndim <= 2:  # Multi-class classification task
                 self.cls_metrics.update(y_hat, y, stage)
             elif len(y_hat.shape) == 4:
-                self.recon_metircs.update(y_hat, y, stage)  # Image reconstruction task
+                self.recon_metrics.update(y_hat, y, stage)  # Image reconstruction task
                 self.gen_metrics.update(y_hat, y, stage)   # Image generation task
             else:
                 raise ValueError("Invalid shape for y_hat.")
@@ -75,6 +75,12 @@ class TrainModule(pl.LightningModule):
                 self.log_dict(res, prog_bar=True)
                 for k, v in res.items():
                     logger.info(f"{k}: {v}")
+
+    def setup(self, stage):
+        self.cls_metrics.to(self.device)
+        self.recon_metrics.to(self.device)
+        self.reg_metrics.to(self.device)
+        self.gen_metrics.to(self.device)
 
     def configure_optimizers(self):
         """
