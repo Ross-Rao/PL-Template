@@ -134,8 +134,8 @@ class TrainModule(pl.LightningModule):
         # y_hat = self.model(*model_params)
         x_t = self.model[0].sample_forward(*model_params)
         y_hat = self.model[1](x_t, model_params[1])
+        return y, y_hat, model_params[1]
         # --------------------------------------------------------------------------------------- #
-        return y, y_hat
 
 
     def criterion_step(self, y, y_hat):
@@ -148,10 +148,23 @@ class TrainModule(pl.LightningModule):
         return loss
 
     def training_step(self, batch, batch_idx):
-        y, y_hat = self.model_step(batch, batch_idx)
+        y, y_hat, t = self.model_step(batch, batch_idx)
         # self._calculate_metrics(y_hat, y, "train")  # not necessary, only debug
-        loss = self.criterion_step(y, y_hat)
-        return loss
+        # loss = self.criterion_step(y, y_hat)
+
+        t = t.squeeze(1)
+        bin_edges = torch.linspace(0, self.n_steps, 11, device=t.device)
+        bin_idx = torch.bucketize(t, bin_edges, right=False) - 1
+        total_loss = self.criterion_step(y, y_hat)
+        out = {'loss': total_loss}
+        for i in range(10):
+            mask = bin_idx == i
+            if mask.sum() == 0:          # 该区间无样本
+                out[f'step_{i}_loss'] = 0.0
+            else:
+                loss_i = self.criterion_step(y[mask], y_hat[mask])
+                out[f'step_{i}_loss'] = loss_i
+        return out
 
     def on_train_batch_end(self, outputs: STEP_OUTPUT, batch: Any, batch_idx: int) -> None:
         # log step loss
@@ -162,7 +175,7 @@ class TrainModule(pl.LightningModule):
         # --------------------------------------------------------------------------------------- #
 
     def validation_step(self, batch, batch_idx):
-        y, y_hat = self.model_step(batch, batch_idx)
+        y, y_hat, _ = self.model_step(batch, batch_idx)
         self._calculate_metrics(y_hat, y, "val")
 
         loss = self.criterion_step(y, y_hat)
@@ -177,7 +190,7 @@ class TrainModule(pl.LightningModule):
         self.log_dict(loss_dt, batch_size=self.get_batch_size(batch), prog_bar=True)
 
     def test_step(self, batch, batch_idx):
-        y, y_hat = self.model_step(batch, batch_idx)
+        y, y_hat, _ = self.model_step(batch, batch_idx)
         self._calculate_metrics(y_hat, y, "test")
         # --------------------------------------------------------------------------------------- #
         # ddpm generation
