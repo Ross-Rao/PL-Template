@@ -72,7 +72,7 @@ class TrainModule(pl.LightningModule):
                 raise ValueError("Invalid shape for y_hat.")
 
     def _log_metrics(self, stage):
-        for metric in [self.recon_metrics, self.reg_metrics, self.cls_metrics]:
+        for metric in [self.reg_metrics, self.cls_metrics, self.gen_metrics]:
             res = metric.compute_and_reset(stage)
             cm = res.pop('test/confusion_matrix', None)
             if cm is not None:
