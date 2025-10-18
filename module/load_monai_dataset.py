@@ -35,13 +35,19 @@ def load_data_from_split_to_monai_dataset(
     val_file = os.path.join(load_dir, val_file_name.format(fold))
     test_file = os.path.join(load_dir, test_file_name)
     
-    def eval_if_list(x):
-        return eval(x) if x.startswith('[') and x.endswith(']') else x
+    def eval_str(x: str):
+        if x.startswith('[') and x.endswith(']'):
+            return eval(x)
+        try:
+            return float(x)
+        except ValueError:
+            pass
+        return x
 
     cols = pd.read_csv(train_file, nrows=0).columns.tolist()
-    train_df = pd.read_csv(train_file, index_col=0, converters={col: eval_if_list for col in cols})
-    val_df = pd.read_csv(val_file, index_col=0, converters={col: eval_if_list for col in cols})
-    test_df = pd.read_csv(test_file, index_col=0, converters={col: eval_if_list for col in cols})
+    train_df = pd.read_csv(train_file, index_col=0, converters={col: eval_str for col in cols})
+    val_df = pd.read_csv(val_file, index_col=0, converters={col: eval_str for col in cols})
+    test_df = pd.read_csv(test_file, index_col=0, converters={col: eval_str for col in cols})
 
     # Convert DataFrame to list of dictionaries
     train_data = train_df.reset_index().to_dict(orient="records")
