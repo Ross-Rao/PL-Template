@@ -11,7 +11,9 @@ __all__ = ['read_metadata_as_df']
 logger = logging.getLogger(__name__)
 
 
-def read_metadata_as_df(data_dir: str, primary_key: str, parser: Dict[str, str], group_by: Union[list[str], None] = None):
+def read_metadata_as_df(data_dir: str, primary_key: str,
+                        parser: Dict[str, Union[str, tuple[Union[list[str], str], str]]],
+                        group_by: Union[list[str], None] = None):
     assert primary_key in parser.keys(), (f'Please add {primary_key} in your parser, using a lambda function to choose '
                                           f'which file is needed in your folder: {data_dir}.')
     metadata = []
@@ -34,18 +36,19 @@ def read_metadata_as_df(data_dir: str, primary_key: str, parser: Dict[str, str],
                 else:
                     if isinstance(single_parser, str):
                         eval_parser = eval(single_parser)
-                        lambda_input = input_path
+                        lambda_input = (input_path,)
                     elif isinstance(single_parser, tuple):
-                        assert len(single_parser) == 2 and single_parser[0] in parser.keys(), (
-                            f'For key {key}, if you want to use another key to parse, please provide a tuple with '
-                            f'(existing_key, lambda function).')
-                        existing_key, eval_parser = single_parser[0], eval(single_parser[1])
-                        lambda_input = file_metadata[existing_key]
+                        assert len(single_parser) == 2, "Parser tuple should have length 2: (existing_keys, lambda function)."
+                        existing_keys, eval_parser = single_parser[0], eval(single_parser[1])
+                        existing_keys = existing_keys if isinstance(existing_keys, list) else [existing_keys]
+                        assert all([k in file_metadata.keys() for k in existing_keys]), \
+                            f"Existing keys {existing_keys} not found in file metadata for parsing {key}."
+                        lambda_input = (file_metadata[k] for k in existing_keys)
                     else:
-                        raise ValueError("Parser should be either a string or a tuple of (existing_key, lambda function).")
+                        raise ValueError("Parser should be either a string or a tuple of (existing_keys, lambda function).")
                     if not callable(eval_parser):
                         raise ValueError(f"Parser for {key} should be a lambda function.")
-                    file_metadata[key] = eval_parser(lambda_input)
+                    file_metadata[key] = eval_parser(*lambda_input)
             metadata.append(file_metadata)
 
     assert len(metadata) > 0, f"No valid files found in {data_dir}, please check the path or the function"
@@ -69,7 +72,7 @@ if __name__ == "__main__":
         "py_files": "lambda x: x.endswith('.py')",
         "name": "lambda x: os.path.basename(x).split('.')[0]",
         'module': "lambda path: os.path.dirname(path)",
-        "load": ("name", "lambda x: x.startswith('load')"),
+        "load": (["name", "py_files"], "lambda x, y: x.startswith('load') and y.endswith('.py')"),
     }
 
     df = read_metadata_as_df(example_dir, data_col_name, function_parser, None)
