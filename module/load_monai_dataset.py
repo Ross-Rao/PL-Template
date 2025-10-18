@@ -82,7 +82,7 @@ def load_data_from_split_to_monai_dataset(
     val_dataset = dataset_class(data=val_data, transform=vt_transform_pos)
     test_dataset = dataset_class(data=test_data, transform=vt_transform_pos)
 
-    return train_dataset, val_dataset, test_dataset
+    return train_dataset, val_dataset, test_dataset, train_df, val_df, test_df
 
 
 def load_monai_dataset(
@@ -126,7 +126,7 @@ def load_monai_dataset(
         test_file_name=test_file_name,
     )
 
-    train_dataset, val_dataset, test_dataset = load_data_from_split_to_monai_dataset(
+    train_dataset, val_dataset, test_dataset, train_df, val_df, test_df = load_data_from_split_to_monai_dataset(
         load_dir=split_save_dir,
         fold=fold,
         transform=transform,
@@ -137,7 +137,7 @@ def load_monai_dataset(
         val_file_name=val_file_name,
         test_file_name=test_file_name,
     )
-    return train_dataset, val_dataset, test_dataset
+    return train_dataset, val_dataset, test_dataset, train_df, val_df, test_df
 
 
 if __name__ == "__main__":
@@ -203,7 +203,7 @@ if __name__ == "__main__":
             # 合并基础配置和数据集特定配置
             test_config = {**base_config, **config}
 
-            train_ds, val_ds, test_ds = load_monai_dataset(**test_config)
+            train_ds, val_ds, test_ds, _, _, _ = load_monai_dataset(**test_config)
 
             print(f"  训练集样本数: {len(train_ds)}")
             print(f"  验证集样本数: {len(val_ds)}")

@@ -24,7 +24,8 @@ class MonaiDataModule(pl.LightningDataModule):
         assert {'train_loader', 'val_loader', 'test_loader'}.issubset(data_loader.keys()), (
             "data_loader must contain 'train_loader', 'val_loader', and 'test_loader'")
 
-        self.original_train_dataset, self.val_dataset, self.test_dataset = load_monai_dataset(**dataset)
+        (self.original_train_dataset, self.val_dataset, self.test_dataset,
+         self.train_data, self.val_data, self.test_data) = load_monai_dataset(**dataset)
         mixup = mixup if mixup is not None else {}
         mixup_ratio, mixup_keys = mixup.get('mixup_ratio', 0), mixup.get('mixup_keys', [])
         assert (mixup_ratio == 0) == (len(mixup_keys) == 0), \
