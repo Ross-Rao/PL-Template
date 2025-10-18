@@ -37,7 +37,7 @@ def read_metadata_as_df(data_dir: str, primary_key: str,
                     if isinstance(single_parser, str):
                         eval_parser = eval(single_parser)
                         lambda_input = (input_path,)
-                    elif isinstance(single_parser, tuple):
+                    elif isinstance(single_parser, tuple) or isinstance(single_parser, list):
                         assert len(single_parser) == 2, "Parser tuple should have length 2: (existing_keys, lambda function)."
                         existing_keys, eval_parser = single_parser[0], eval(single_parser[1])
                         existing_keys = existing_keys if isinstance(existing_keys, list) else [existing_keys]
