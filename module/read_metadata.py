@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 def read_metadata_as_df(data_dir: str, primary_key: str,
                         parser: Dict[str, Union[str, tuple[Union[list[str], str], str]]],
-                        group_by: Union[list[str], None] = None):
+                        group_by: Union[list[str], None] = None,
+                        explode: Union[list[str], None] = None,
+                        drop: Union[list[str], None] = None) -> pd.DataFrame:
     assert primary_key in parser.keys(), (f'Please add {primary_key} in your parser, using a lambda function to choose '
                                           f'which file is needed in your folder: {data_dir}.')
     metadata = []
@@ -62,6 +64,16 @@ def read_metadata_as_df(data_dir: str, primary_key: str,
 
         meta_df = meta_df.groupby(group_by)[primary_key].apply(list).reset_index()
         logger.info(f"Grouped metadata by {group_by}")
+
+    if explode:
+        assert all([col in meta_df.columns for col in explode]), f"Columns {explode} not found in metadata"
+        meta_df = meta_df.explode(explode).reset_index(drop=True)
+        logger.info(f"Exploded metadata columns {explode}")
+
+    if drop:
+        assert all([col in meta_df.columns for col in drop]), f"Columns {drop} not found in metadata"
+        meta_df = meta_df.drop(columns=drop)
+        logger.info(f"Dropped metadata columns {drop}")
     return meta_df
 
 if __name__ == "__main__":
@@ -80,5 +92,11 @@ if __name__ == "__main__":
 
     # if one col is varied in groups, the final df will not contain this col
     df = read_metadata_as_df(example_dir, data_col_name, function_parser, ["module", 'load'])
+    print(df.head().to_string())
+
+    df = read_metadata_as_df(example_dir, data_col_name, function_parser, ["module", 'load'], explode=['py_files'])
+    print(df.head().to_string())
+
+    df = read_metadata_as_df(example_dir, data_col_name, function_parser, None, drop=['load'])
     print(df.head().to_string())
     

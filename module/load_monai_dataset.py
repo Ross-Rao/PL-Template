@@ -88,6 +88,8 @@ def load_monai_dataset(
     test_split_ratio: float,
     split_save_dir: str,
     group_by: Union[list[str], None] = None,
+    explode: Union[list[str], None] = None,
+    drop: Union[list[str], None] = None,
     split_cols: Union[list, None] = None,
     shuffle: bool = True,
     seed: int = 42,
@@ -101,7 +103,7 @@ def load_monai_dataset(
     val_file_name: str = "val_{0}.csv",
     test_file_name: str = "test.csv",
 ):
-    dataframe = read_metadata_as_df(data_dir, primary_key, parser, group_by)
+    dataframe = read_metadata_as_df(data_dir, primary_key, parser, group_by, explode, drop)
     logger.info(f"读取到 {len(dataframe)} 个文件的元数据")
     split_dataset_folds_and_save(
         df=dataframe,
