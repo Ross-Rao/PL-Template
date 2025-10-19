@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Union
 # package import
 import pandas as pd
+import numpy as np
 # local import
 
 __all__ = ['read_metadata_as_df']
@@ -78,25 +79,76 @@ def read_metadata_as_df(data_dir: str, primary_key: str,
 
 if __name__ == "__main__":
     # example usage
-    example_dir = "."
-    data_col_name = "py_files"
+    example_dir = "/home/lai/Ross/datasets/MERGE_data/her2st"
+    data_col_name = "image"
     function_parser = {
-        "py_files": "lambda x: x.endswith('.py')",
-        "name": "lambda x: os.path.basename(x).split('.')[0]",
-        'module': "lambda path: os.path.dirname(path)",
-        "load": (["name", "py_files"], "lambda x, y: x.startswith('load') and y.endswith('.py')"),
+        "image": "lambda x: x.endswith('.jpg')",
+        "wsi": "lambda x: imread(x)",
+        "barcodes": "lambda x: pd.read_csv(x.replace('wsi', 'barcodes').replace('.jpg', '.csv'), header=None)[0].values",
+        "spot_num": ('barcodes', "lambda x: len(x)"),
+        "tissue_positions": "lambda x: (y := pd.read_csv(x.replace('wsi', 'tissue_positions').replace('.jpg', '.csv'), index_col=0), y[y['in_tissue'] == 1])[1]",
+        "tissue_x_coords": ('tissue_positions', "lambda x: x['pxl_col_in_fullres'].values"),
+        "tissue_y_coords": ('tissue_positions', "lambda x: x['pxl_row_in_fullres'].values"),
+        "patches": (["tissue_x_coords", "tissue_y_coords", "wsi"],
+                    "lambda x, y, wsi: [wsi[round(yc)-128:round(yc)+128, round(xc)-128:round(xc)+128, :3] "
+                    "if 0 <= round(xc)-128 < wsi.shape[1]-256 and 0 <= round(yc)-128 < wsi.shape[0]-256 "
+                    "else wsi[max(0, round(yc)-128):min(wsi.shape[0], round(yc)+128), max(0, round(xc)-128):min(wsi.shape[1], round(xc)+128), :3] "
+                    "for xc, yc in zip(x, y)]"),
+        "counts": "lambda x: np.load(x.replace('wsi', 'counts_spcs_to_8n').replace('.jpg', '.npy'))",
+        "nonzero_indices": ('counts', "lambda x: x.sum(axis=1) > 0"),
     }
 
-    df = read_metadata_as_df(example_dir, data_col_name, function_parser, None)
-    print(df.head().to_string())
+    # df = read_metadata_as_df(example_dir, data_col_name, function_parser, None)
+    # print(df.head().to_string())
+    #
+    # # if one col is varied in groups, the final df will not contain this col
+    # df = read_metadata_as_df(example_dir, data_col_name, function_parser, ["module", 'load'])
+    # print(df.head().to_string())
+    #
+    # df = read_metadata_as_df(example_dir, data_col_name, function_parser, ["module", 'load'], explode=['py_files'])
+    # print(df.head().to_string())
+    #
+    # df = read_metadata_as_df(example_dir, data_col_name, function_parser, None, drop=['load'])
+    # print(df.head().to_string())
 
-    # if one col is varied in groups, the final df will not contain this col
-    df = read_metadata_as_df(example_dir, data_col_name, function_parser, ["module", 'load'])
-    print(df.head().to_string())
-
-    df = read_metadata_as_df(example_dir, data_col_name, function_parser, ["module", 'load'], explode=['py_files'])
-    print(df.head().to_string())
-
-    df = read_metadata_as_df(example_dir, data_col_name, function_parser, None, drop=['load'])
-    print(df.head().to_string())
+    from module.load_monai_dataset import load_monai_dataset
+    new_parser = {
+        'image': "lambda x: x.endswith('.jpg')",
+        'spot_num': "lambda x: len(pd.read_csv(x.replace('wsi', 'barcodes').replace('.jpg', '.csv'), header=None)[0].values)",
+        'tissue_positions': "lambda x: (y := pd.read_csv(x.replace('wsi', 'tissue_positions').replace('.jpg', '.csv'), index_col=0), y[y['in_tissue'] == 1])[1]",
+        'tissue_x_coords': ['tissue_positions', "lambda x: x['pxl_col_in_fullres'].values.tolist()"],
+        'tissue_y_coords': ['tissue_positions', "lambda x: x['pxl_row_in_fullres'].values.tolist()"],
+        "temp_count": "lambda x: np.load(x.replace('wsi', 'counts_spcs_to_8n').replace('.jpg', '.npy'))",
+        "counts": ('temp_count', "lambda x: x.tolist()"),
+        "nonzero_indices": ('temp_count', "lambda x: x.sum(axis=1) > 0")
+    }
+    df = read_metadata_as_df(example_dir, data_col_name, new_parser, None,
+                             explode=['tissue_x_coords', 'tissue_y_coords', 'counts', "nonzero_indices"],
+                             drop=['tissue_positions', 'temp_count'])
+    print(df['nonzero_indices'].all())
+    # train_ds, val_ds, test_ds = load_monai_dataset(
+    #     data_dir=example_dir,
+    #     primary_key=data_col_name,
+    #     parser=new_parser,
+    #     group_by=None,
+    #     fold=0,
+    #     n_folds=3,
+    #     explode=['tissue_x_coords', 'tissue_y_coords', 'counts', "nonzero_indices"],
+    #     drop=['tissue_positions', 'temp_count'],
+    #     test_split_ratio=0.2,
+    #     split_save_dir="./example_data/splits",
+    #     split_cols=['image'],
+    #     shuffle=True,
+    #     seed=42,
+    #     use_existing_split=False,
+    #     reset_split_index=True,
+    #     transform=None,
+    #     val_test_transform=None,
+    #     dataset='Dataset',
+    #     dataset_params=None,
+    #     train_file_name="train_{0}.csv",
+    #     val_file_name="val_{0}.csv",
+    #     test_file_name="test.csv",
+    # )
+    # print(f"Train dataset length: {len(train_ds)}")
     

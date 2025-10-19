@@ -19,7 +19,7 @@ class RegressionMetrics:
                         'test': MetricCollection(metrics, prefix="test/").eval()}
 
     def update(self, preds, target, stage):
-        self.metrics[stage].update(preds.reshape(-1), target)
+        self.metrics[stage].update(preds.reshape(-1), target.reshape(-1))
 
     def to(self, device):
         for v in self.metrics.values():

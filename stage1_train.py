@@ -12,11 +12,14 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from lightning.pytorch.loggers import TensorBoardLogger
 # local import
-from module.train_module import TrainModule
+from module.stage1_train_module import TrainModule
 from module.monai_data_module import MonaiDataModule
 from custom import callbacks as custom_callbacks
 from utils.load_module import get_unique_attr_across
 from utils.logger import log_exception
+# extra import
+from PIL import Image
+Image.MAX_IMAGE_PIXELS = None
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,23 @@ def main(cfg: DictConfig):
     data_module = MonaiDataModule(cfg.get("dataset_folder").get("dataset"), cfg.get("dataset_folder").get("dataloader"),
                                   cfg.get("dataset_folder").get("mixup"))
     logger.info("data module built.")
+
+    # graph dataset
+    # build one hop graph
+    # df = data_module.train_data[['spot_num', 'tissue_x_coords', 'tissue_y_coords']]
+    # df = df.assign(spot_num=df['spot_num'].astype(int)).groupby('spot_num', as_index=False).agg(
+    #     {'tissue_x_coords': list, 'tissue_y_coords': list})
+    # from sklearn.neighbors import kneighbors_graph
+    # import numpy as np
+    # def per_spot_adjacency(df_row):
+    #     x = np.asarray(df_row['tissue_x_coords'])
+    #     y = np.asarray(df_row['tissue_y_coords'])
+    #     pts = np.column_stack([x, y])          # (n, 2)
+    #     adj = kneighbors_graph(pts, n_neighbors=min(8, len(pts)-1), mode='connectivity', include_self=False)
+    #     return adj.toarray()
+    # adj_list = df.apply(per_spot_adjacency, axis=1).tolist()
+    # adj_list = [torch.tensor((adj + adj.T) > 0).fill_diagonal_(1) for adj in adj_list]
+    # herarchical graph
 
     model_config, criterion_config = cfg.get("model_folder").get("model"), cfg.get("model_folder").get("criterion")
     optimizer_config, lr_scheduler_config = cfg.get("model_folder").get("optimizer"), cfg.get("model_folder").get("lr_scheduler", {})
