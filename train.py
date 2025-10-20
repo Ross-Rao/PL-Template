@@ -68,9 +68,10 @@ def main(cfg: DictConfig):
 
     # datamodule
     data_module = MonaiDataModule(cfg.get("dataset_folder").get("dataset"), cfg.get("dataset_folder").get("dataloader"),
-                                  cfg.get("dataset_folder").get("mixup"))
+                                  cfg.get("dataset_folder").get("mixup"), **cfg.get("dataset_folder").get("extra", {}))
     logger.info("data module built.")
 
+    # model and train module
     model_config, criterion_config = cfg.get("model_folder").get("model"), cfg.get("model_folder").get("criterion")
     optimizer_config, lr_scheduler_config = cfg.get("model_folder").get("optimizer"), cfg.get("model_folder").get("lr_scheduler", {})
     extra_config = cfg.get("model_folder").get("extra", {})

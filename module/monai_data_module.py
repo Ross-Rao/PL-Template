@@ -17,7 +17,10 @@ __all__ = ['MonaiDataModule']
 
 
 class MonaiDataModule(pl.LightningDataModule):
-    def __init__(self, dataset: dict[str, ...], data_loader: dict[str, ...], mixup: Union[None, dict[str, ...]]) -> None:
+    def __init__(self,
+                 dataset: dict[str, ...],
+                 data_loader: dict[str, ...],
+                 mixup: Union[None, dict[str, ...]], **kwargs) -> None:
         super().__init__()
 
         self.dataset_config = dataset
@@ -39,6 +42,7 @@ class MonaiDataModule(pl.LightningDataModule):
 
         self.train_loader_params, self.val_loader_params, self.test_loader_params = (
             data_loader['train_loader'], data_loader['val_loader'], data_loader['test_loader'])
+        self.__dict__.update(kwargs)
 
     def mixup_dataset(self, dataset, keys: list, ratio: float, alpha: float = 1.0, mix_package: str = 'numpy'):
         original_len = len(dataset)

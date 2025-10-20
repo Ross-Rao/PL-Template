@@ -44,9 +44,9 @@ class TrainModule(pl.LightningModule):
         self.recon_metrics = ReconstructionMetrics()
         self.reg_metrics = RegressionMetrics()
         self.gen_metrics = GenerationMetrics(fid_feature=2048)
-        # --------------------------------------------------------------------------------------- #
-        assert 0 and kwargs.keys(), "add extra config here, please check your code"
-        # --------------------------------------------------------------------------------------- #
+
+        # add extra config here
+        self.__dict__.update(kwargs)
 
     def _calculate_metrics(self, y_hat_tp, y_tp, stage):
         # ensure matched y and y_hat is same
