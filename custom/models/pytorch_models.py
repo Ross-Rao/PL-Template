@@ -47,55 +47,21 @@ class GATNet(nn.Module):
         x = self.final_conv(x, edge_index)
         return x
 
-
-# class GATNet(nn.Module):
-#     def __init__(self, in_features, num_genes, num_heads=8, drop_edge=0.2, dim1=448, dim2=384, dim3=256):
-#         super(GATNet, self).__init__()
-#         self.drop_edge = drop_edge
-#
-#         # The first input dimension is 256 because the ResNetMLP model outputs 256 features
-#         self.nn1 = GATConv(in_features, dim1, num_heads)
-#         self.layer_norm1 = LayerNorm(dim1 * num_heads)
-#
-#         self.nn2 = GATConv(dim1 * num_heads, dim2, num_heads)
-#         self.layer_norm2 = LayerNorm(dim2 * num_heads)
-#
-#         self.nn3 = GATConv(dim2 * num_heads, dim3, num_heads)
-#         self.layer_norm3 = LayerNorm(dim3 * num_heads)
-#
-#         # The output dimension is the number of genes
-#         self.nn4 = GATConv(dim3 * num_heads, num_genes)
-#
-#     def forward(self, x, edge_index):
-#         # Randomly drops out edges with probability p
-#         edge_index, _ = dropout_edge(edge_index, p=self.drop_edge, training=self.training)
-#
-#         x = F.relu(self.nn1(x, edge_index))
-#         # Layer normalization
-#         x = self.layer_norm1(x)
-#
-#         x = F.relu(self.nn2(x, edge_index))
-#         # Layer normalization
-#         x = self.layer_norm2(x)
-#
-#         x = F.relu(self.nn3(x, edge_index))
-#         # Layer normalization
-#         x = self.layer_norm3(x)
-#
-#         x = self.nn4(x, edge_index)
-#
-#         return x
-
 class ResnetMLP(nn.Module):
-    def __init__(self, path=None):
+    def __init__(self, path=None, train=True):
         super(ResnetMLP, self).__init__()
         # Load the ResNet model
         resnet = models.resnet18(weights=None, norm_layer=nn.InstanceNorm2d)
         if path:
-            path = torch.load(path)
-            state_dict = {k.replace('model.', ''): v for k, v in path['state_dict'].items() if k.startswith('model.')}
-            resnet.load_state_dict(state_dict)
-            for param in resnet.parameters():
+            weight = torch.load(path)
+            if path.endswith('.ckpt'):
+                weight = {k.replace('model.', ''): v for k, v in weight['state_dict'].items() if k.startswith('model.')}
+                self.load_state_dict(weight)
+            else:
+                weight = {k.replace('module.', ''): v for k, v in weight.items() if k.startswith('module.')}
+                self.load_state_dict(weight)
+        if not train:
+            for param in self.parameters():
                 param.requires_grad = False
 
         # Remove the last fully connected layer

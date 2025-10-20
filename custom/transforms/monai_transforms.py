@@ -1,4 +1,4 @@
-# conda install -c conda-forge openslide
+# pip install openslide-bin
 # pip install openslide-python
 from typing import Hashable, Sequence, Union
 import numpy as np
@@ -59,5 +59,17 @@ class CropPatchFromImageD(Transform):
         path = d[self.image_key]  # WSI 文件路径
         xc = d[self.x_key]
         yc = d[self.y_key]
-        d[self.patch_key] = self._crop_one(xc, yc, path)
+        # 统一成列表
+        xc_list = np.atleast_1d(xc)
+        yc_list = np.atleast_1d(yc)
+
+        half = self.patch_size // 2
+        patches = []
+        for xc_i, yc_i in zip(xc_list, yc_list):
+            x0 = int(round(xc_i)) - half[1]
+            y0 = int(round(yc_i)) - half[0]
+            patches.append(self._crop_one(x0, y0, path))
+
+        # 沿新轴堆叠: (N, H, W, C)
+        d[self.patch_key] = np.stack(patches, axis=0)
         return d

@@ -1,4 +1,4 @@
-# IRCL model using HCC-WCH dataset
+# MERGE model using skin dataset
 
 callbacks:  # inline definition of callbacks, don't change the name
   # relevant input arguments in main.py
@@ -36,7 +36,8 @@ model:
     - 'ResnetMLP'
     - 'PredictHead'
   model_params:
-    -
+    - path: './pretrained/model-low-v1.pth'
+      train: True
     - in_features: 256
       out_features: 250
       dropout: 0.2
