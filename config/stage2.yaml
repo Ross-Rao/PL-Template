@@ -1,0 +1,8 @@
+defaults:
+  # hydra settings
+  - hydra  # refer to `hydra.yaml`
+  - dataset_folder: skin-stage2  # refer to `dataset/skin.yaml`
+  - model_folder: MERGE-skin-stage2  # refer to `model/MERGE-skin.yaml`
+  - _self_  # 占位符：表示当前文件，在defaults的最后一行声明，可以保证当前文件的配置可覆盖之前的配置
+
+num_classes: 250

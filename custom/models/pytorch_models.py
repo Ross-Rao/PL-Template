@@ -52,6 +52,17 @@ class ResnetMLP(nn.Module):
         super(ResnetMLP, self).__init__()
         # Load the ResNet model
         resnet = models.resnet18(weights=None, norm_layer=nn.InstanceNorm2d)
+
+        # Remove the last fully connected layer
+        self.features = nn.Sequential(*list(resnet.children())[:-1])
+
+        # Add a projection MLP
+        num_ftrs = resnet.fc.in_features
+        self.l1 = nn.Linear(num_ftrs, num_ftrs)
+
+        # This is hardcoded to 256, because the pretrained model was trained with this size
+        self.l2 = nn.Linear(num_ftrs, 256)
+
         if path:
             weight = torch.load(path)
             if path.endswith('.ckpt'):
@@ -63,16 +74,6 @@ class ResnetMLP(nn.Module):
         if not train:
             for param in self.parameters():
                 param.requires_grad = False
-
-        # Remove the last fully connected layer
-        self.features = nn.Sequential(*list(resnet.children())[:-1])
-
-        # Add a projection MLP
-        num_ftrs = resnet.fc.in_features
-        self.l1 = nn.Linear(num_ftrs, num_ftrs)
-
-        # This is hardcoded to 256, because the pretrained model was trained with this size
-        self.l2 = nn.Linear(num_ftrs, 256)
 
     def forward(self, x):
         h = self.features(x)

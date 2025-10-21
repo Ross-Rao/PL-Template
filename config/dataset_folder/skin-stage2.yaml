@@ -1,0 +1,84 @@
+# skin dataset for MERGE
+
+load_image: &LOAD
+  CropPatchFromImageD:
+    image_key: 'image'
+    patch_key: 'patch'
+    x_key: 'tissue_x_coords'
+    y_key: 'tissue_y_coords'
+    patch_size: 256
+  ToTensorD:
+    keys: ['counts', 'patch', 'tissue_x_coords', 'tissue_y_coords']
+  TransposeD:
+    keys: ['patch']
+    indices: [0, 3, 1, 2]
+  CenterSpatialCropD:
+    keys: ['patch']
+    roi_size: [-1, 224, 224]
+  ScaleIntensityD:
+    keys: ['patch']
+    minv: 0.0
+    maxv: 1.0
+  BuildGraphD:
+    x_key: 'tissue_x_coords'
+    y_key: 'tissue_y_coords'
+    patch_key: 'patch'
+    model_path: './pretrained/model-low-v1.pth'
+    edge_idx_key: 'edge_idx'
+    emb_key: 'emb'
+    clus_label_key: 'cluster_label'
+    n_cluster: 5
+    max_iter: 1000
+    n_init: 10
+
+
+name: 'skin_stage2'
+dataset:
+  data_dir: '${oc.env:DATASET_LOCATION, ./data}/MERGE_data/skin'
+  primary_key: 'image'
+  parser:
+    image: "lambda x: x.endswith('.svs')"
+    spot_num: "lambda x: len(pd.read_csv(x.replace('/svs', '/barcodes').replace('.svs', '.csv'), header=None)[0].values)"
+    tissue_positions: "lambda x: (y := pd.read_csv(x.replace('/svs', '/tissue_positions').replace('.svs', '.csv'), index_col=0), y[y['in_tissue'] == 1])[1]"
+    tissue_x_coords: ['tissue_positions', "lambda x: x['pxl_col_in_fullres'].values.astype(float).tolist()"]
+    tissue_y_coords: ['tissue_positions', "lambda x: x['pxl_row_in_fullres'].values.astype(float).tolist()"]
+    temp_count: "lambda x: np.load(x.replace('/svs', '/counts_spcs_to_8n').replace('.svs', '.npy'))"
+    counts: ['temp_count', "lambda x: x.tolist()"]
+    nonzero_indices: ['temp_count', "lambda x: (x.sum(axis=1) > 0).tolist()"]
+  n_folds: 5
+  fold: 0
+  test_split_ratio: 0.15
+  split_save_dir: "./exp/${dataset_folder.name}-${dataset_folder.dataset.n_folds}folds-seed${dataset_folder.dataset.seed}/split${dataset_folder.dataset.test_split_ratio}"
+  group_by:
+  explode:
+  drop: ['tissue_positions', 'temp_count']
+  split_cols: ['image']
+  shuffle: True
+  seed: 42
+  use_existing_split: False
+  reset_split_index: True
+  dataset: 'CacheDataset'  # class
+#  dataset: 'Dataset'  # class
+  dataset_params:
+    cache_rate: 1.0
+    num_workers: 4
+  transform:
+    <<: *LOAD
+mixup:
+#  mixup_ratio: 25
+#  mixup_keys: ['image', 'label']
+dataloader:
+  train_loader:
+    shuffle: True
+    batch_size: 1
+    num_workers: 4
+    pin_memory: true
+    persistent_workers: true
+  val_loader:
+    shuffle: False
+    num_workers: 4
+    batch_size: 1
+  test_loader:
+    shuffle: False
+    num_workers: 4
+    batch_size: 1

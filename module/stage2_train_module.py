@@ -55,15 +55,7 @@ class TrainModule(pl.LightningModule):
         y_tp = y_tp if isinstance(y_tp, tuple) else (y_tp,)
 
         for y_hat, y in zip(y_hat_tp, y_tp):
-            if y_hat.shape[1] == 1 and y_hat.ndim <= 2:  # Regression task
-                self.reg_metrics.update(y_hat, y, stage)
-            elif y_hat.shape[1] >= 2 and y_hat.ndim <= 2:  # Multi-class classification task
-                self.cls_metrics.update(y_hat, y, stage)
-            elif len(y_hat.shape) == 4:
-                self.recon_metrics.update(y_hat, y, stage)  # Image reconstruction task
-                self.gen_metrics.update(y_hat, y, stage)   # Image generation task
-            else:
-                raise ValueError("Invalid shape for y_hat.")
+            self.reg_metrics.update(y_hat, y, stage)
 
     def _log_metrics(self, stage):
         for metric in [self.recon_metrics, self.reg_metrics, self.cls_metrics]:
@@ -101,8 +93,8 @@ class TrainModule(pl.LightningModule):
             return batch[0], batch[1]
         elif isinstance(batch, dict):
             # --------------------------------------------------------------------------------------- #
-            assert 0 and batch, "configure your input here, please check your code"
-            return self, batch
+            # assert 0 and batch, "configure your input here, please check your code"
+            return (batch['emb'].squeeze(), batch['edge_idx'].squeeze()), batch['counts'].as_tensor().squeeze()
             # --------------------------------------------------------------------------------------- #
         else:
             raise ValueError('Invalid batch type')
@@ -120,7 +112,7 @@ class TrainModule(pl.LightningModule):
         x, y = self.get_batch(batch)
         model_params = x if isinstance(x, tuple) else (x,)
         # --------------------------------------------------------------------------------------- #
-        assert 0 and model_params, "execute your model with your input here, please check your code"
+        # assert 0 and model_params, "execute your model with your input here, please check your code"
         y_hat = self.model(*model_params)
         # --------------------------------------------------------------------------------------- #
         return y, y_hat
@@ -129,7 +121,7 @@ class TrainModule(pl.LightningModule):
     def criterion_step(self, y, y_hat):
         criterion_params = (y_hat if isinstance(y_hat, tuple) else (y_hat,)) + (y if isinstance(y, tuple) else (y,))
         # --------------------------------------------------------------------------------------- #
-        assert 0 and criterion_params, "add your own code here to match the output with loss, please check your code"
+        # assert 0 and criterion_params, "add your own code here to match the output with loss, please check your code"
         # be sure that y_hat params first and y params later in your criterion function
         loss = self.criterion(*criterion_params)
         # --------------------------------------------------------------------------------------- #
