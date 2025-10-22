@@ -3,23 +3,23 @@
 load_image: &LOAD
   CropPatchFromImageD:
     image_key: 'image'
-    patch_key: 'image'
+    patch_key: 'patch'
     x_key: 'tissue_x_coords'
     y_key: 'tissue_y_coords'
     patch_size: 256
   ToTensorD:
-    keys: ['counts', 'image']
+    keys: ['counts', 'patch']
   EnsureChannelFirstD:
-    keys: ['image']
+    keys: ['patch']
     channel_dim: -1
   CenterSpatialCropD:
-    keys: ['image']
-    roi_size: [224, 224]
+    keys: ['patch']
+    roi_size: [-1, 224, 224]
 
 
 normalize: &NORM
   ScaleIntensityD:
-    keys: ['image']
+    keys: ['patch']
     minv: 0.0
     maxv: 1.0
 

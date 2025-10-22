@@ -18,8 +18,7 @@ from custom import callbacks as custom_callbacks
 from utils.load_module import get_unique_attr_across
 from utils.logger import log_exception
 # extra import
-from PIL import Image
-Image.MAX_IMAGE_PIXELS = None
+
 
 logger = logging.getLogger(__name__)
 

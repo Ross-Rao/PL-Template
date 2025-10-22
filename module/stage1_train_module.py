@@ -94,7 +94,7 @@ class TrainModule(pl.LightningModule):
         elif isinstance(batch, dict):
             # --------------------------------------------------------------------------------------- #
             # assert 0 and batch, "configure your input here, please check your code"
-            return batch['image'].as_tensor(), batch['counts'].as_tensor()
+            return batch['image'].as_tensor().squeeze(), batch['counts'].as_tensor()
             # --------------------------------------------------------------------------------------- #
         else:
             raise ValueError('Invalid batch type')
