@@ -66,7 +66,7 @@ class ResnetMLP(nn.Module):
         if path:
             weight = torch.load(path)
             if path.endswith('.ckpt'):
-                weight = {k.replace('model.', ''): v for k, v in weight['state_dict'].items() if k.startswith('model.')}
+                weight = {k.replace('model.0.', ''): v for k, v in weight['state_dict'].items() if k.startswith('model.0.')}
                 self.load_state_dict(weight)
             else:
                 weight = {k.replace('module.', ''): v for k, v in weight.items() if k.startswith('module.')}
