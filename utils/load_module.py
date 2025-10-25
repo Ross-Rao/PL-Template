@@ -37,7 +37,7 @@ def get_unique_attr_across(modules: list, attr: Union[str, list, dict]):
             else:
                 results += valid_funcs
     else:
-        assert isinstance(attr, str), "attr must be type of dict, list or str."
+        assert isinstance(attr, str), f"attr must be type of dict, list or str, got {attr}."
         funcs = [getattr(module, attr, None) for module in modules]
         valid_funcs = [func for func in funcs if func is not None]
         if not valid_funcs:

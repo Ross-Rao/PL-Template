@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 @log_exception(logger=logger)
 def main(cfg: DictConfig):
     cfg = OmegaConf.to_container(cfg, resolve=True)
-    cfg = instantiate(cfg)  # add python instance input
 
     # print the config
     script = os.path.basename(sys.argv[0])
